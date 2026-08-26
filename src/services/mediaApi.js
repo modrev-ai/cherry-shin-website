@@ -210,8 +210,108 @@ const instagramContent = [
     },
 ];
 
+const facebookContent = [
+    {
+        id: 'fb1',
+        platform: 'facebook',
+        title: 'Behind the scenes at the Seoul shoot',
+        thumbnail: 'https://picsum.photos/seed/csfb1/600/750',
+        embedUrl: null,
+        date: '3 days ago',
+        likes: 12400,
+        views: null,
+        url: 'https://www.facebook.com/itscherryshin'
+    },
+    {
+        id: 'fb2',
+        platform: 'facebook',
+        title: 'Thank you for 500K! ❤️',
+        thumbnail: 'https://picsum.photos/seed/csfb2/600/750',
+        embedUrl: null,
+        date: '1 week ago',
+        likes: 28900,
+        views: null,
+        url: 'https://www.facebook.com/itscherryshin'
+    },
+    {
+        id: 'fb3',
+        platform: 'facebook',
+        title: 'Live Q&A recap — skincare edition',
+        thumbnail: 'https://picsum.photos/seed/csfb3/600/750',
+        embedUrl: null,
+        date: '2 weeks ago',
+        likes: 9600,
+        views: 154000,
+        url: 'https://www.facebook.com/itscherryshin'
+    },
+    {
+        id: 'fb4',
+        platform: 'facebook',
+        title: 'Spring lookbook album',
+        thumbnail: 'https://picsum.photos/seed/csfb4/600/750',
+        embedUrl: null,
+        date: '3 weeks ago',
+        likes: 15200,
+        views: null,
+        url: 'https://www.facebook.com/itscherryshin'
+    },
+];
+
+const twitterContent = [
+    {
+        id: 'tw1',
+        platform: 'twitter',
+        title: 'currently accepting cafe recommendations in Seoul ☕',
+        thumbnail: 'https://picsum.photos/seed/cstw1/800/450',
+        embedUrl: null,
+        date: '1 day ago',
+        likes: 8300,
+        views: 96000,
+        url: 'https://x.com/itscherryshin'
+    },
+    {
+        id: 'tw2',
+        platform: 'twitter',
+        title: 'new video is live — go watch it before I overthink it',
+        thumbnail: 'https://picsum.photos/seed/cstw2/800/450',
+        embedUrl: null,
+        date: '4 days ago',
+        likes: 14700,
+        views: 210000,
+        url: 'https://x.com/itscherryshin'
+    },
+    {
+        id: 'tw3',
+        platform: 'twitter',
+        title: 'packing for Tokyo, taking outfit requests',
+        thumbnail: 'https://picsum.photos/seed/cstw3/800/450',
+        embedUrl: null,
+        date: '1 week ago',
+        likes: 6100,
+        views: 74000,
+        url: 'https://x.com/itscherryshin'
+    },
+    {
+        id: 'tw4',
+        platform: 'twitter',
+        title: 'the lighting did most of the work here honestly',
+        thumbnail: 'https://picsum.photos/seed/cstw4/800/450',
+        embedUrl: null,
+        date: '2 weeks ago',
+        likes: 19800,
+        views: 265000,
+        url: 'https://x.com/itscherryshin'
+    },
+];
+
 // Combine all content into a single pool
-const allContent = [...tiktokContent, ...youtubeContent, ...instagramContent];
+const allContent = [
+    ...tiktokContent,
+    ...youtubeContent,
+    ...instagramContent,
+    ...facebookContent,
+    ...twitterContent,
+];
 
 function shuffleArray(array) {
     const shuffled = [...array];
@@ -220,6 +320,33 @@ function shuffleArray(array) {
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled;
+}
+
+// Round-robin across platforms so consecutive posts come from different sources:
+// Instagram, then TikTok, then Facebook, and so on. Within a platform the order is
+// shuffled, and the platform order rotates per call so the feed varies between pages.
+function interleaveByPlatform(items) {
+    const byPlatform = new Map();
+    for (const item of items) {
+        if (!byPlatform.has(item.platform)) byPlatform.set(item.platform, []);
+        byPlatform.get(item.platform).push(item);
+    }
+
+    const queues = shuffleArray([...byPlatform.values()]).map(shuffleArray);
+
+    const ordered = [];
+    let placed = true;
+    while (placed) {
+        placed = false;
+        for (const queue of queues) {
+            const next = queue.shift();
+            if (next) {
+                ordered.push(next);
+                placed = true;
+            }
+        }
+    }
+    return ordered;
 }
 
 const ITEMS_PER_PAGE = 6;
@@ -249,8 +376,8 @@ export async function fetchMixedMedia(page = 0) {
         // Simulate slight delay for smooth UX
         await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 300));
 
-        // Endless scrolling: cycle through the content pool with fresh shuffle each page
-        const shuffled = shuffleArray(mockContent);
+        // Endless scrolling: cycle through the content pool, re-interleaved each page
+        const ordered = interleaveByPlatform(mockContent);
 
         // If we've cycled through all items, start over with a new shuffle
         const start = (page % Math.ceil(mockContent.length / ITEMS_PER_PAGE)) * ITEMS_PER_PAGE;
@@ -261,7 +388,7 @@ export async function fetchMixedMedia(page = 0) {
         for (let i = start; i < end; i++) {
             const idx = i % mockContent.length;
             // Add a unique suffix to prevent React key conflicts on repeat cycles
-            const item = { ...shuffled[idx], cycleId: `${page}-${i}` };
+            const item = { ...ordered[idx], cycleId: `${page}-${i}` };
             result.push(item);
         }
 

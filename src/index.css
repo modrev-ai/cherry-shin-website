@@ -436,15 +436,21 @@ body {
 }
 
 /* ===== Reels Grid ===== */
+/* Single-column feed: one post per row, so you scroll from one platform to the next */
 .reels-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.reels-grid .media-card {
+  width: 100%;
+  max-width: 480px;
 }
 
 @media (max-width: 600px) {
   .reels-grid {
-    grid-template-columns: 1fr;
     gap: 16px;
   }
 }
@@ -493,9 +499,15 @@ body {
 
 .media-thumbnail {
   width: 100%;
-  aspect-ratio: 9/16;
+  aspect-ratio: 4/5;
   position: relative;
   overflow: hidden;
+}
+
+/* Landscape sources keep their native shape instead of being cropped to portrait */
+.media-card--youtube .media-thumbnail,
+.media-card--twitter .media-thumbnail {
+  aspect-ratio: 16/9;
 }
 
 .media-thumbnail img {

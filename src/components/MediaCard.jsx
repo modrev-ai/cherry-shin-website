@@ -9,7 +9,7 @@ function MediaCard({ item, index, onClick }) {
 
     return (
         <div
-            className={`media-card ${loaded ? 'loaded' : ''} ${error ? 'error' : ''}`}
+            className={`media-card media-card--${item.platform} ${loaded ? 'loaded' : ''} ${error ? 'error' : ''}`}
             style={{ animationDelay: `${delay}ms` }}
             onClick={onClick}
         >
