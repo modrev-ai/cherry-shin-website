@@ -16,7 +16,9 @@ export function useInfiniteScroll(fetchData, isLoading) {
                     fetchData();
                 }
             },
-            { threshold: 0.1 }
+            // Full-screen snap slides mean the sentinel past the last post can never
+            // be rested on, so extend the root downwards to load well before it.
+            { threshold: 0, rootMargin: '0px 0px 150% 0px' }
         );
 
         const currentRef = loaderRef.current;
