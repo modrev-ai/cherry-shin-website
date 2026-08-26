@@ -928,14 +928,25 @@ body {
   transform: none;
 }
 
-.reels-grid .media-thumbnail {
-  aspect-ratio: auto;
-  height: 100%;
-  width: 100%;
+/* Reel frame: a 9:16 portrait player centred in the slide, capped so it never
+   exceeds the viewport height. On a wide screen the slide stays black either
+   side of it, the way an Instagram reel sits on desktop. */
+.reels-grid .media-card {
+  --reel-width: min(100%, calc(100vh * 9 / 16));
+  --reel-width: min(100%, calc(100dvh * 9 / 16));
+  align-items: center;
 }
 
-/* Portrait sources fill the screen; landscape ones letterbox instead of
-   being cropped down to a sliver. */
+.reels-grid .media-thumbnail {
+  width: var(--reel-width);
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: 9 / 16;
+  background: #000;
+}
+
+/* Landscape sources letterbox inside the portrait frame rather than being
+   cropped to a sliver of the original shot. */
 .reels-grid .media-card--youtube .media-thumbnail img,
 .reels-grid .media-card--twitter .media-thumbnail img {
   object-fit: contain;
@@ -943,11 +954,13 @@ body {
 }
 
 /* Caption and stats ride over the media rather than pushing it off-screen */
+/* Caption and platform badge track the reel frame, not the full-width slide */
 .reels-grid .media-info {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
   bottom: 0;
+  width: var(--reel-width);
+  transform: translateX(-50%);
   z-index: 2;
   padding: 24px 20px 32px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.85) 60%);
@@ -955,7 +968,80 @@ body {
 }
 
 .reels-grid .media-card-header {
-  top: 20px;
-  left: 20px;
-  right: 20px;
+  left: 50%;
+  right: auto;
+  top: calc(50% - (var(--reel-width) * 16 / 9) / 2 + 20px);
+  width: calc(var(--reel-width) - 40px);
+  transform: translateX(-50%);
+}
+
+/* ===== Scroll cue on the hero slide ===== */
+.scroll-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 36px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  z-index: 3;
+  animation: scrollCueBob 2s ease-in-out infinite;
+  transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+.scroll-cue:hover {
+  background: rgba(255, 107, 157, 0.18);
+  border-color: rgba(255, 107, 157, 0.6);
+  color: #fff;
+}
+
+.scroll-cue:focus-visible {
+  outline: 2px solid #ff6b9d;
+  outline-offset: 3px;
+}
+
+/* Soft halo that pulses outwards from the arrow */
+.scroll-cue::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 107, 157, 0.5);
+  animation: scrollCuePulse 2s ease-out infinite;
+}
+
+@keyframes scrollCueBob {
+  0%, 100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, 8px);
+  }
+}
+
+@keyframes scrollCuePulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  70%, 100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-cue,
+  .scroll-cue::before {
+    animation: none;
+  }
 }
