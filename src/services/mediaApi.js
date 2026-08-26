@@ -12,6 +12,8 @@ const tiktokContent = [
         embedUrl: null,
         date: '2 days ago',
         likes: 45200,
+        comments: 814,
+        shares: 271,
         views: 890000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
@@ -23,6 +25,8 @@ const tiktokContent = [
         embedUrl: null,
         date: '5 days ago',
         likes: 38100,
+        comments: 838,
+        shares: 305,
         views: 720000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
@@ -34,6 +38,8 @@ const tiktokContent = [
         embedUrl: null,
         date: '1 week ago',
         likes: 52300,
+        comments: 1360,
+        shares: 523,
         views: 950000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
@@ -45,6 +51,8 @@ const tiktokContent = [
         embedUrl: null,
         date: '1 week ago',
         likes: 29800,
+        comments: 894,
+        shares: 179,
         views: 540000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
@@ -56,6 +64,8 @@ const tiktokContent = [
         embedUrl: null,
         date: '2 weeks ago',
         likes: 61200,
+        comments: 2081,
+        shares: 490,
         views: 1100000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
@@ -67,6 +77,8 @@ const tiktokContent = [
         embedUrl: null,
         date: '2 weeks ago',
         likes: 44800,
+        comments: 806,
+        shares: 448,
         views: 820000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
@@ -78,6 +90,8 @@ const tiktokContent = [
         embedUrl: null,
         date: '3 weeks ago',
         likes: 37500,
+        comments: 825,
+        shares: 225,
         views: 680000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
@@ -92,6 +106,8 @@ const youtubeContent = [
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
         date: '3 days ago',
         likes: 28400,
+        comments: 738,
+        shares: 227,
         views: 456000,
         url: 'https://www.youtube.com/@cherryshin'
     },
@@ -103,6 +119,8 @@ const youtubeContent = [
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
         date: '1 week ago',
         likes: 31200,
+        comments: 936,
+        shares: 312,
         views: 523000,
         url: 'https://www.youtube.com/@cherryshin'
     },
@@ -114,6 +132,8 @@ const youtubeContent = [
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
         date: '2 weeks ago',
         likes: 42100,
+        comments: 1431,
+        shares: 253,
         views: 678000,
         url: 'https://www.youtube.com/@cherryshin'
     },
@@ -125,6 +145,8 @@ const youtubeContent = [
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
         date: '3 weeks ago',
         likes: 35600,
+        comments: 641,
+        shares: 285,
         views: 589000,
         url: 'https://www.youtube.com/@cherryshin'
     },
@@ -136,6 +158,8 @@ const youtubeContent = [
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
         date: '1 month ago',
         likes: 27300,
+        comments: 601,
+        shares: 273,
         views: 412000,
         url: 'https://www.youtube.com/@cherryshin'
     },
@@ -150,6 +174,8 @@ const instagramContent = [
         embedUrl: null,
         date: '1 day ago',
         likes: 89200,
+        comments: 2319,
+        shares: 535,
         views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
@@ -161,6 +187,8 @@ const instagramContent = [
         embedUrl: null,
         date: '4 days ago',
         likes: 76500,
+        comments: 2295,
+        shares: 612,
         views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
@@ -172,6 +200,8 @@ const instagramContent = [
         embedUrl: null,
         date: '1 week ago',
         likes: 92100,
+        comments: 3131,
+        shares: 921,
         views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
@@ -183,6 +213,8 @@ const instagramContent = [
         embedUrl: null,
         date: '2 weeks ago',
         likes: 68400,
+        comments: 1231,
+        shares: 410,
         views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
@@ -194,6 +226,8 @@ const instagramContent = [
         embedUrl: null,
         date: '2 weeks ago',
         likes: 81700,
+        comments: 1797,
+        shares: 654,
         views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
@@ -205,6 +239,8 @@ const instagramContent = [
         embedUrl: null,
         date: '3 weeks ago',
         likes: 95300,
+        comments: 2478,
+        shares: 953,
         views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
@@ -219,6 +255,8 @@ const facebookContent = [
         embedUrl: null,
         date: '3 days ago',
         likes: 12400,
+        comments: 372,
+        shares: 74,
         views: null,
         url: 'https://www.facebook.com/itscherryshin'
     },
@@ -230,6 +268,8 @@ const facebookContent = [
         embedUrl: null,
         date: '1 week ago',
         likes: 28900,
+        comments: 983,
+        shares: 231,
         views: null,
         url: 'https://www.facebook.com/itscherryshin'
     },
@@ -241,6 +281,8 @@ const facebookContent = [
         embedUrl: null,
         date: '2 weeks ago',
         likes: 9600,
+        comments: 173,
+        shares: 96,
         views: 154000,
         url: 'https://www.facebook.com/itscherryshin'
     },
@@ -252,6 +294,8 @@ const facebookContent = [
         embedUrl: null,
         date: '3 weeks ago',
         likes: 15200,
+        comments: 334,
+        shares: 91,
         views: null,
         url: 'https://www.facebook.com/itscherryshin'
     },
@@ -266,6 +310,8 @@ const twitterContent = [
         embedUrl: null,
         date: '1 day ago',
         likes: 8300,
+        comments: 216,
+        shares: 66,
         views: 96000,
         url: 'https://x.com/itscherryshin'
     },
@@ -277,6 +323,8 @@ const twitterContent = [
         embedUrl: null,
         date: '4 days ago',
         likes: 14700,
+        comments: 441,
+        shares: 147,
         views: 210000,
         url: 'https://x.com/itscherryshin'
     },
@@ -288,6 +336,8 @@ const twitterContent = [
         embedUrl: null,
         date: '1 week ago',
         likes: 6100,
+        comments: 207,
+        shares: 37,
         views: 74000,
         url: 'https://x.com/itscherryshin'
     },
@@ -299,6 +349,8 @@ const twitterContent = [
         embedUrl: null,
         date: '2 weeks ago',
         likes: 19800,
+        comments: 356,
+        shares: 158,
         views: 265000,
         url: 'https://x.com/itscherryshin'
     },
@@ -359,9 +411,12 @@ export async function fetchMixedMedia(page = 0) {
             const response = await fetch(`${API_BASE}/instagram/media?limit=${ITEMS_PER_PAGE * 2}`);
             if (response.ok) {
                 const data = await response.json();
+                // The Graph API names these differently to our mock shape
                 instagramItems = (data.data || []).map(item => ({
                     ...item,
                     platform: 'instagram',
+                    likes: item.like_count,
+                    comments: item.comments_count,
                 }));
             }
         } catch (err) {
