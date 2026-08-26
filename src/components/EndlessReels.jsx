@@ -37,7 +37,7 @@ function EndlessReels() {
 
     useEffect(() => {
         loadMoreMedia()
-    }, [])
+    }, [loadMoreMedia])
 
     const loaderRef = useInfiniteScroll(loadMoreMedia, loading)
 

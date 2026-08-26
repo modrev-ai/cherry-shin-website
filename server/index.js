@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -35,11 +35,6 @@ async function loadTokenCache() {
     } catch {
         return { accessToken: IG_ACCESS_TOKEN, expiresAt: 0 };
     }
-}
-
-// Helper: save token cache
-async function saveTokenCache(cache) {
-    await writeFile(TOKEN_CACHE_FILE, JSON.stringify(cache, null, 2));
 }
 
 // Instagram Graph API base URL

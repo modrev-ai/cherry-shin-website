@@ -223,7 +223,6 @@ function shuffleArray(array) {
 }
 
 const ITEMS_PER_PAGE = 6;
-let currentPage = 0;
 
 export async function fetchMixedMedia(page = 0) {
     try {
@@ -251,7 +250,6 @@ export async function fetchMixedMedia(page = 0) {
         await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 300));
 
         // Endless scrolling: cycle through the content pool with fresh shuffle each page
-        currentPage = page;
         const shuffled = shuffleArray(mockContent);
 
         // If we've cycled through all items, start over with a new shuffle
