@@ -16,27 +16,32 @@ A modern, responsive influencer website featuring an **endless reels** content f
 
 ```
 cherry-shin-website/
+├── public/
+│   ├── favicon.svg
+│   └── icons.svg
 ├── src/
+│   ├── assets/
+│   │   └── hero.png               # Hero background image
 │   ├── components/
-│   │   ├── Navbar.jsx
-│   │   ├── Hero.jsx
+│   │   ├── HeroSection.jsx        # Landing header with profile + stats
 │   │   ├── EndlessReels.jsx       # Main endless scroll feed
 │   │   ├── MediaCard.jsx          # Individual media card component
 │   │   ├── MediaModal.jsx         # Modal for expanded media view
-│   │   ├── PlatformIcon.jsx       # Platform-specific icons
-│   │   ├── About.jsx
-│   │   └── Footer.jsx
+│   │   └── PlatformIcon.jsx       # Platform-specific icons
 │   ├── hooks/
-│   │   └── useInfiniteScroll.js   # Custom infinite scroll hook
+│   │   ├── useInfiniteScroll.js   # IntersectionObserver scroll trigger
+│   │   └── useMediaFeed.js        # Paginated feed state (items, loadMore)
 │   ├── services/
 │   │   └── mediaApi.js            # API service for fetching mixed media
-│   ├── App.jsx
+│   ├── App.jsx                    # Composes HeroSection + EndlessReels
+│   ├── App.css
 │   ├── main.jsx
-│   └── index.css
+│   └── index.css                  # Global styles, dark theme, skeletons
 ├── server/
 │   ├── index.js                   # Express backend for Instagram API proxy
 │   ├── package.json
 │   └── .env.example               # Environment variables template
+├── index.html
 ├── package.json
 └── vite.config.js
 ```
@@ -106,7 +111,8 @@ To fetch real Instagram posts:
 - **Frontend:** React 19, Vite
 - **Backend:** Node.js, Express
 - **Styling:** Custom CSS with CSS Grid & Flexbox
-- **APIs:** Instagram Graph API, YouTube Data API
+- **APIs:** Instagram Graph API (live, via the Express proxy). TikTok and YouTube
+  content is currently mock data defined in `src/services/mediaApi.js`.
 
 ## License
 
