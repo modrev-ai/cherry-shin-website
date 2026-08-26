@@ -64,7 +64,7 @@ function EndlessReels() {
             </div>
 
             {loading && (
-                <div ref={loaderRef} className="reels-loading-more">
+                <div className="reels-loading-more">
                     <div className="loading-spinner"></div>
                 </div>
             )}
