@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { cached, getStats } from './cache.js';
 
 dotenv.config();
 
@@ -24,6 +25,10 @@ const IG_USER_ID = process.env.IG_USER_ID || '17841405309284898';
 // Token cache file
 const TOKEN_CACHE_FILE = join(__dirname, 'token_cache.json');
 
+// How long a fetched feed stays fresh. Upstream is called once per window
+// regardless of how many visitors arrive in it.
+const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS) || 10 * 60 * 1000;
+
 app.use(cors());
 app.use(express.json());
 
@@ -38,60 +43,91 @@ async function loadTokenCache() {
 }
 
 // Instagram Graph API base URL
-const IG_API = 'https://graph.facebook.com/v18.0';
+// Overridable so the cache layer can be exercised against a stub upstream, and
+// so the Graph API version can be bumped without a code change.
+const IG_API = process.env.IG_API_BASE || 'https://graph.facebook.com/v18.0';
+
+const IG_FIELDS = 'id,media_type,media_url,thumbnail_url,caption,timestamp,like_count,comments_count,permalink';
+
+function mapInstagramItem(item) {
+    return {
+        id: item.id,
+        platform: 'instagram',
+        title: item.caption || 'Instagram Post',
+        thumbnail: item.thumbnail_url || item.media_url,
+        mediaUrl: item.media_url,
+        mediaType: item.media_type, // PHOTO, VIDEO, CAROUSEL_ALBUM
+        embedUrl: item.permalink,
+        date: item.timestamp ? new Date(item.timestamp).toLocaleDateString() : '',
+        likes: item.like_count || 0,
+        views: null,
+        comments: item.comments_count || 0,
+        url: item.permalink,
+    };
+}
+
+// Calls the Graph API and throws on an API-level error, so the cache can decide
+// whether to fall back to an older copy.
+async function fetchInstagramMedia(token, { limit = 12, after = null } = {}) {
+    const url = `${IG_API}/${IG_USER_ID}/media`
+        + `?fields=${IG_FIELDS}`
+        + `&limit=${limit}`
+        + (after ? `&after=${encodeURIComponent(after)}` : '')
+        + `&access_token=${token}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.error) {
+        const err = new Error(data.error.message);
+        err.isUpstream = true;
+        throw err;
+    }
+
+    return {
+        data: (data.data || []).map(mapInstagramItem),
+        paging: data.paging || null,
+    };
+}
+
+// Tell the caller (and any CDN in front) how the response was served.
+function sendCached(res, result) {
+    const label = { store: 'HIT', upstream: 'MISS', stale: 'STALE' };
+    res.set('X-Cache', label[result.source] || 'MISS');
+    res.set('Age', String(Math.floor(result.ageMs / 1000)));
+    res.set('Cache-Control', `public, max-age=${Math.floor(CACHE_TTL_MS / 1000)}`);
+    if (result.state === 'stale') {
+        res.set('Warning', '110 - Response is stale');
+    }
+    return res.json(result.value);
+}
 
 // Endpoint: get Instagram media
 app.get('/api/instagram/media', async (req, res) => {
     try {
-        const cache = await loadTokenCache();
-        const token = cache.accessToken;
-        const limit = req.query.limit || 12;
+        const tokenCache = await loadTokenCache();
+        const token = tokenCache.accessToken;
+        const limit = Number(req.query.limit) || 12;
 
         if (isPlaceholderToken(token)) {
             return res.status(500).json({ error: 'No Instagram access token configured. Set IG_ACCESS_TOKEN in .env' });
         }
 
-        const url = `${IG_API}/${IG_USER_ID}/media` +
-            `?fields=id,media_type,media_url,thumbnail_url,caption,timestamp,like_count,comments_count,permalink` +
-            `&limit=${limit}` +
-            `&access_token=${token}`;
+        // Keyed by limit so different page sizes do not clobber each other.
+        const result = await cached(
+            `ig:media:${limit}`,
+            () => fetchInstagramMedia(token, { limit }),
+            { ttlMs: CACHE_TTL_MS }
+        );
 
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.error) {
-            // Token might be expired - try to return cached results
-            console.error('Instagram API error:', data.error.message);
-            return res.status(500).json({
-                error: 'Instagram API error',
-                message: data.error.message,
-                hint: 'Token may be expired. Visit https://developers.facebook.com/tools/explorer/ to refresh it.'
-            });
-        }
-
-        // Transform Instagram response to our format
-        const items = (data.data || []).map(item => ({
-            id: item.id,
-            platform: 'instagram',
-            title: item.caption || 'Instagram Post',
-            thumbnail: item.thumbnail_url || item.media_url,
-            mediaUrl: item.media_url,
-            mediaType: item.media_type, // PHOTO, VIDEO, CAROUSELAlbum
-            embedUrl: item.permalink,
-            date: item.timestamp ? new Date(item.timestamp).toLocaleDateString() : '',
-            likes: item.like_count || 0,
-            views: null,
-            comments: item.comments_count || 0,
-            url: item.permalink,
-        }));
-
-        res.json({
-            data: items,
-            paging: data.paging || null,
-        });
+        return sendCached(res, result);
     } catch (error) {
-        console.error('Error fetching Instagram media:', error);
-        res.status(500).json({ error: 'Failed to fetch Instagram media' });
+        console.error('Error fetching Instagram media:', error.message);
+        return res.status(502).json({
+            error: 'Instagram API error',
+            message: error.message,
+            hint: 'Token may be expired. Visit https://developers.facebook.com/tools/explorer/ to refresh it.'
+        });
     }
 });
 
@@ -124,9 +160,9 @@ app.get('/api/instagram/status', async (req, res) => {
 app.get('/api/instagram/media/next', async (req, res) => {
     try {
         const { cursor } = req.query;
-        const cache = await loadTokenCache();
+        const tokenCache = await loadTokenCache();
 
-        if (isPlaceholderToken(cache.accessToken)) {
+        if (isPlaceholderToken(tokenCache.accessToken)) {
             return res.status(500).json({ error: 'No Instagram access token configured. Set IG_ACCESS_TOKEN in .env' });
         }
 
@@ -134,42 +170,23 @@ app.get('/api/instagram/media/next', async (req, res) => {
             return res.status(400).json({ error: 'Cursor required' });
         }
 
-        const url = `${IG_API}/${IG_USER_ID}/media` +
-            `?fields=id,media_type,media_url,thumbnail_url,caption,timestamp,like_count,comments_count,permalink` +
-            `&limit=12` +
-            `&after=${cursor}` +
-            `&access_token=${cache.accessToken}`;
+        const result = await cached(
+            `ig:media:next:${cursor}`,
+            () => fetchInstagramMedia(tokenCache.accessToken, { limit: 12, after: cursor }),
+            { ttlMs: CACHE_TTL_MS }
+        );
 
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.error) {
-            return res.status(500).json({ error: data.error.message });
-        }
-
-        const items = (data.data || []).map(item => ({
-            id: item.id,
-            platform: 'instagram',
-            title: item.caption || 'Instagram Post',
-            thumbnail: item.thumbnail_url || item.media_url,
-            mediaUrl: item.media_url,
-            mediaType: item.media_type,
-            embedUrl: item.permalink,
-            date: item.timestamp ? new Date(item.timestamp).toLocaleDateString() : '',
-            likes: item.like_count || 0,
-            views: null,
-            comments: item.comments_count || 0,
-            url: item.permalink,
-        }));
-
-        res.json({
-            data: items,
-            paging: data.paging || null,
-        });
+        return sendCached(res, result);
     } catch (error) {
-        console.error('Error fetching next page:', error);
-        res.status(500).json({ error: 'Failed to fetch next page' });
+        console.error('Error fetching next page:', error.message);
+        return res.status(502).json({ error: error.message });
     }
+});
+
+// Endpoint: cache visibility, for checking that upstream calls stay flat
+// as traffic grows.
+app.get('/api/cache/stats', (req, res) => {
+    res.json({ ttlMs: CACHE_TTL_MS, ...getStats() });
 });
 
 app.listen(PORT, () => {
