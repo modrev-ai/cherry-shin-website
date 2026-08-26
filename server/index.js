@@ -15,6 +15,10 @@ const PORT = process.env.PORT || 3001;
 
 // Instagram Graph API config
 const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
+
+// The shipped .env template uses a placeholder value. Treat it as unset so we
+// report "not configured" instead of sending a bogus token to the Graph API.
+const isPlaceholderToken = (t) => !t || /^your_.*_here$/.test(t.trim());
 const IG_USER_ID = process.env.IG_USER_ID || '17841405309284898';
 
 // Token cache file
@@ -171,5 +175,5 @@ app.get('/api/instagram/media/next', async (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`API Server running on http://localhost:${PORT}`);
-    console.log(`Instagram token: ${IG_ACCESS_TOKEN ? 'Configured' : 'NOT CONFIGURED - set IG_ACCESS_TOKEN in .env'}`);
+    console.log(`Instagram token: ${isPlaceholderToken(IG_ACCESS_TOKEN) ? 'NOT CONFIGURED - set IG_ACCESS_TOKEN in .env' : 'Configured'}`);
 });

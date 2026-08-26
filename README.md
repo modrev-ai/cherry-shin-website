@@ -74,7 +74,7 @@ To fetch real Instagram posts:
 1. **Set up Meta Developer credentials:**
    - Go to [Meta for Developers](https://developers.facebook.com/)
    - Create an app with Instagram Basic Display permissions
-   - Get your `INSTAGRAM_ACCESS_TOKEN` and `INSTAGRAM_USER_ID`
+   - Get your `IG_ACCESS_TOKEN` and `IG_USER_ID`
 
 2. **Configure the backend server:**
    ```bash
@@ -84,8 +84,8 @@ To fetch real Instagram posts:
    cp .env.example .env
    
    # Edit .env with your credentials
-   #   INSTAGRAM_ACCESS_TOKEN=your_token_here
-   #   INSTAGRAM_USER_ID=your_user_id_here
+   #   IG_ACCESS_TOKEN=your_token_here
+   #   IG_USER_ID=your_user_id_here
    ```
 
 3. **Start the backend server:**
