@@ -27,3 +27,6 @@ dist-ssr
 
 # Local env files (keep .env.example tracked)
 .env
+
+# One-off Linktree scrape, not app source
+linktree_output.html
