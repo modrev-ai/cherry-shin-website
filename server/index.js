@@ -52,7 +52,7 @@ app.get('/api/instagram/media', async (req, res) => {
         const token = cache.accessToken;
         const limit = req.query.limit || 12;
 
-        if (!token) {
+        if (isPlaceholderToken(token)) {
             return res.status(500).json({ error: 'No Instagram access token configured. Set IG_ACCESS_TOKEN in .env' });
         }
 
@@ -131,7 +131,7 @@ app.get('/api/instagram/media/next', async (req, res) => {
         const { cursor } = req.query;
         const cache = await loadTokenCache();
 
-        if (!cursor || !cache.accessToken) {
+        if (!cursor || isPlaceholderToken(cache.accessToken)) {
             return res.status(400).json({ error: 'Cursor and token required' });
         }
 
