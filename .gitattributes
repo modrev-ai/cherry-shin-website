@@ -1,0 +1,21 @@
+# Normalize line endings.
+#
+# The repo previously held a mix of CRLF and LF, which turned small edits into
+# whole-file diffs whenever a tool rewrote a file with the other ending.
+# text=auto stores every text file with LF in the repository; eol=lf checks it
+# out with LF too, so the working tree matches on every platform.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.mp4 binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
