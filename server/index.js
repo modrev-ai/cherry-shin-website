@@ -131,8 +131,12 @@ app.get('/api/instagram/media/next', async (req, res) => {
         const { cursor } = req.query;
         const cache = await loadTokenCache();
 
-        if (!cursor || isPlaceholderToken(cache.accessToken)) {
-            return res.status(400).json({ error: 'Cursor and token required' });
+        if (isPlaceholderToken(cache.accessToken)) {
+            return res.status(500).json({ error: 'No Instagram access token configured. Set IG_ACCESS_TOKEN in .env' });
+        }
+
+        if (!cursor) {
+            return res.status(400).json({ error: 'Cursor required' });
         }
 
         const url = `${IG_API}/${IG_USER_ID}/media` +
