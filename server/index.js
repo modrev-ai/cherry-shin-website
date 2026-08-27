@@ -64,6 +64,28 @@ const FB_FIELDS_WITH_COUNTS = [
 
 let fbEngagementAllowed = true;
 
+// Facebook refuses to embed posts whose audio it judges to be someone else's,
+// which is most reels with music. There is no API field for it, but the plugin
+// page says so in its HTML, so probe it once per cache window and drop the
+// embed for those posts rather than showing a broken player.
+async function isEmbeddable(permalink) {
+    if (!permalink) return false;
+    try {
+        const url = `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(permalink)}`;
+        const response = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) return false;
+        const html = await response.text();
+        return !/may contain content owned by someone else|can(&#039;|')t be embedded/i.test(html);
+    } catch {
+        // Unknown: assume not embeddable, so the card shows its thumbnail and
+        // watch button instead of a player that may fail.
+        return false;
+    }
+}
+
 function mapFacebookPost(post) {
     const attachment = post.attachments?.data?.[0];
     const image = attachment?.media?.image;
@@ -72,9 +94,12 @@ function mapFacebookPost(post) {
 
     // Page posts embed through the plugin endpoints rather than a direct media
     // URL. Videos and ordinary posts use different ones.
+    // Inline playback has no click behind it, so autoplay must be muted, the
+    // same constraint the other platforms have.
     const embedUrl = permalink
         ? `https://www.facebook.com/plugins/${isVideo ? 'video' : 'post'}.php`
             + `?href=${encodeURIComponent(permalink)}&show_text=false`
+            + (isVideo ? '&autoplay=true&mute=1' : '')
         : null;
 
     return {
@@ -123,6 +148,18 @@ async function fetchFacebookPosts({ limit = 12 } = {}) {
 
     // A post with no image would render as an empty card in a media feed.
     const items = (data.data || []).map(mapFacebookPost).filter(item => item.thumbnail);
+
+    const embeddable = await Promise.all(
+        items.map(item => (item.embedUrl ? isEmbeddable(item.url) : Promise.resolve(false)))
+    );
+    items.forEach((item, i) => {
+        if (!embeddable[i]) item.embedUrl = null;
+    });
+
+    const blocked = embeddable.filter(ok => !ok).length;
+    if (blocked > 0) {
+        console.warn(`Facebook: ${blocked} of ${items.length} posts cannot be embedded; showing stills`);
+    }
 
     return { data: items, paging: data.paging || null };
 }
