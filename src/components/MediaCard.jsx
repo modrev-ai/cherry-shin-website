@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import PlatformIcon from './PlatformIcon'
+import { platformLabel } from '../constants/platforms'
 import MediaActions from './MediaActions'
 
 function MediaCard({ item, index, onClick }) {
@@ -38,24 +39,34 @@ function MediaCard({ item, index, onClick }) {
                         <span>{item.platform} Content</span>
                     </div>
                 )}
-                <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="media-overlay"
-                >
+                {/* Purely decorative: the thumbnail opens the modal via the
+                    card's own handler. Nothing here navigates off the site. */}
+                <div className="media-overlay" aria-hidden="true">
                     <div className="play-button">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M8 5v14l11-7z" />
                         </svg>
                     </div>
-                </a>
+                </div>
             </div>
 
             <MediaActions item={item} />
 
             <div className="media-info">
                 <h3 className="media-title">{item.title}</h3>
+                <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="watch-button"
+                    onClick={e => e.stopPropagation()}
+                    aria-label={`Watch "${item.title}" on ${platformLabel(item.platform)}`}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M8 5v14l11-7z" />
+                    </svg>
+                    Watch on {platformLabel(item.platform)}
+                </a>
             </div>
 
         </div>

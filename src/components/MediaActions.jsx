@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 function formatCount(num) {
     if (!num && num !== 0) return null
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
@@ -8,7 +10,20 @@ function formatCount(num) {
 // Vertical rail beside the reel: engagement counts first, then the actions that
 // have no count of their own.
 function MediaActions({ item }) {
+    const [copied, setCopied] = useState(false)
     const stop = (event) => event.stopPropagation()
+
+    // The watch button in the caption is the only thing that navigates away, so
+    // share copies the link instead of opening the post elsewhere.
+    const copyLink = async () => {
+        try {
+            await navigator.clipboard.writeText(item.url)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1600)
+        } catch (err) {
+            console.warn('Clipboard unavailable:', err)
+        }
+    }
 
     return (
         <div className="media-actions" onClick={stop}>
@@ -36,18 +51,18 @@ function MediaActions({ item }) {
                 <span className="action-count">{formatCount(item.shares)}</span>
             </button>
 
-            <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
+            <button
+                type="button"
                 className="action-btn"
-                aria-label={`Open this post on ${item.platform}`}
+                onClick={copyLink}
+                aria-label={copied ? 'Link copied' : 'Copy link to this post'}
             >
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                     <path d="M22 2L11 13" strokeLinecap="round" strokeLinejoin="round" />
                     <path d="M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-            </a>
+                {copied && <span className="action-count">Copied</span>}
+            </button>
 
             <button type="button" className="action-btn" aria-label="Save">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

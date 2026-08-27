@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
-import { fetchMixedMedia } from '../services/mediaApi'
+import { fetchMixedMedia, BackendUnreachableError } from '../services/mediaApi'
 import MediaCard from './MediaCard'
 import MediaModal from './MediaModal'
 
@@ -9,6 +9,7 @@ function EndlessReels() {
     const [loading, setLoading] = useState(true)
     const [hasMore, setHasMore] = useState(true)
     const [selectedItem, setSelectedItem] = useState(null)
+    const [error, setError] = useState(null)
     const pageRef = useRef(0)
     const loadingRef = useRef(false)
 
@@ -21,25 +22,69 @@ function EndlessReels() {
             const page = pageRef.current
             const newItems = await fetchMixedMedia(page)
 
+            setError(null)
             if (newItems.length === 0) {
                 setHasMore(false)
             } else {
                 setMediaItems(prev => [...prev, ...newItems])
                 pageRef.current = page + 1
             }
-        } catch (error) {
-            console.error('Failed to fetch media:', error)
+        } catch (err) {
+            console.error('Failed to fetch media:', err)
+            // Stop the scroll sentinel from re-triggering, which would otherwise
+            // retry forever behind a spinner that looks like a slow load.
+            setHasMore(false)
+            setError(
+                err instanceof BackendUnreachableError
+                    ? "Couldn't reach the server."
+                    : 'Something went wrong loading the feed.'
+            )
         } finally {
             loadingRef.current = false
             setLoading(false)
         }
     }, [hasMore])
 
+    const retry = useCallback(() => {
+        setError(null)
+        setHasMore(true)
+        loadingRef.current = false
+        // hasMore flipping back to true rebuilds loadMoreMedia, so call the
+        // fetch directly rather than relying on the stale closure.
+        setLoading(true)
+        fetchMixedMedia(pageRef.current)
+            .then(newItems => {
+                setMediaItems(prev => [...prev, ...newItems])
+                pageRef.current += 1
+            })
+            .catch(err => {
+                setHasMore(false)
+                setError(
+                    err instanceof BackendUnreachableError
+                        ? "Couldn't reach the server."
+                        : 'Something went wrong loading the feed.'
+                )
+            })
+            .finally(() => setLoading(false))
+    }, [])
+
     useEffect(() => {
         loadMoreMedia()
     }, [loadMoreMedia])
 
     const loaderRef = useInfiniteScroll(loadMoreMedia, loading)
+
+    if (mediaItems.length === 0 && error) {
+        return (
+            <div className="reels-error">
+                <h3>{error}</h3>
+                <p>The feed couldn&apos;t be loaded. Check your connection and try again.</p>
+                <button type="button" className="reels-retry" onClick={retry}>
+                    Try again
+                </button>
+            </div>
+        )
+    }
 
     if (mediaItems.length === 0 && loading) {
         return (
@@ -69,7 +114,16 @@ function EndlessReels() {
                 </div>
             )}
 
-            {!hasMore && mediaItems.length > 0 && (
+            {error && mediaItems.length > 0 && (
+                <div className="reels-error reels-error--inline">
+                    <p>{error}</p>
+                    <button type="button" className="reels-retry" onClick={retry}>
+                        Try again
+                    </button>
+                </div>
+            )}
+
+            {!hasMore && !error && mediaItems.length > 0 && (
                 <div className="no-more-content">
                     <p>You've reached the end!</p>
                 </div>

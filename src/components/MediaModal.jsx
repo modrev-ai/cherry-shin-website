@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import PlatformIcon from './PlatformIcon'
+import { platformLabel } from '../constants/platforms'
 
 function MediaModal({ item, onClose }) {
     useEffect(() => {
@@ -51,8 +52,25 @@ function MediaModal({ item, onClose }) {
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         ></iframe>
                     ) : (
+                        // No embed available for this platform. Say so plainly
+                        // rather than showing a still that looks like a broken
+                        // player.
                         <div className="media-modal-image-wrapper">
                             <img src={item.thumbnail} alt={item.title} />
+                            <div className="media-modal-noembed">
+                                <p>This post can&apos;t be played here.</p>
+                                <a
+                                    href={item.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="watch-button"
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    Watch on {platformLabel(item.platform)}
+                                </a>
+                            </div>
                         </div>
                     )}
                 </div>

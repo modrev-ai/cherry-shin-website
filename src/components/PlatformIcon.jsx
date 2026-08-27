@@ -1,20 +1,4 @@
-const platformColors = {
-    tiktok: '#000000',
-    youtube: '#FF0000',
-    instagram: '#E4405F',
-    twitter: '#FFFFFF',
-    facebook: '#1877F2',
-    twitch: '#9146FF'
-}
-
-const platformNames = {
-    tiktok: 'TikTok',
-    youtube: 'YouTube',
-    instagram: 'Instagram',
-    twitter: 'X',
-    facebook: 'Facebook',
-    twitch: 'Twitch'
-}
+import { platformColors, platformNames } from '../constants/platforms'
 
 function PlatformIcon({ platform }) {
     const color = platformColors[platform] || '#666'
