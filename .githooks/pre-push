@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Runs the same lint and build that CI runs, before anything leaves the machine.
+#
+# This is a speed bump, not a gate. It is bypassable with `git push --no-verify`,
+# it only protects machines where it has been installed, and it proves nothing
+# about what the server will do. Branch protection would be the real gate, but
+# that needs a paid plan for a private repo. CI on GitHub remains the source of
+# truth; this just catches the obvious things earlier.
+
+set -e
+
+# git feeds us "<local ref> <local sha> <remote ref> <remote sha>" per ref.
+# A deletion has an all-zero local sha, and there is nothing to lint or build
+# when the only thing being pushed is a branch removal.
+only_deletions=1
+saw_ref=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+    saw_ref=1
+    case "$local_sha" in
+        *[!0]*) only_deletions=0 ;;
+    esac
+done
+
+if [ "$saw_ref" -eq 1 ] && [ "$only_deletions" -eq 1 ]; then
+    echo "pre-push: deletion only, skipping checks"
+    exit 0
+fi
+
+if [ ! -d node_modules ]; then
+    echo "pre-push: node_modules missing, skipping checks (run 'npm install')" >&2
+    exit 0
+fi
+
+echo "pre-push: running lint..."
+if ! npm run --silent lint:ci; then
+    echo "" >&2
+    echo "pre-push: lint failed. Push aborted." >&2
+    echo "  Fix the warnings above, or bypass with: git push --no-verify" >&2
+    exit 1
+fi
+
+echo "pre-push: running build..."
+if ! npm run --silent build >/dev/null; then
+    echo "" >&2
+    echo "pre-push: build failed. Push aborted." >&2
+    echo "  Fix the error above, or bypass with: git push --no-verify" >&2
+    exit 1
+fi
+
+echo "pre-push: lint and build passed."

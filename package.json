@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "lint:ci": "oxlint --deny-warnings"
+    "lint:ci": "oxlint --deny-warnings",
+    "prepare": "node scripts/install-hooks.mjs"
   },
   "dependencies": {
     "react": "^19.2.7",
