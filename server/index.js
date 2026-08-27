@@ -43,17 +43,26 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 const YT_API = process.env.YT_API_BASE || 'https://www.googleapis.com/youtube/v3';
 
-const FB_FIELDS = [
+// Like and comment summaries need a permission beyond pages_read_engagement:
+// without it the whole request fails with code 10, not just those fields. Rather
+// than dropping the counts for good, ask for them and fall back once if refused,
+// so adding the scope later restores them with no code change.
+const FB_FIELDS_BASE = [
     'id',
     'message',
     'created_time',
     'full_picture',
     'permalink_url',
     'attachments{media_type,media,unshimmed_url}',
+    'shares',
+];
+const FB_FIELDS_WITH_COUNTS = [
+    ...FB_FIELDS_BASE,
     'likes.summary(true).limit(0)',
     'comments.summary(true).limit(0)',
-    'shares',
-].join(',');
+];
+
+let fbEngagementAllowed = true;
 
 function mapFacebookPost(post) {
     const attachment = post.attachments?.data?.[0];
@@ -87,13 +96,24 @@ function mapFacebookPost(post) {
 }
 
 async function fetchFacebookPosts({ limit = 12 } = {}) {
-    const url = `${FB_API}/${FB_PAGE_ID}/posts`
-        + `?fields=${FB_FIELDS}`
-        + `&limit=${limit}`
-        + `&access_token=${FB_PAGE_ACCESS_TOKEN}`;
+    const request = async (fields) => {
+        const url = `${FB_API}/${FB_PAGE_ID}/posts`
+            + `?fields=${fields.join(',')}`
+            + `&limit=${limit}`
+            + `&access_token=${FB_PAGE_ACCESS_TOKEN}`;
+        const response = await fetch(url);
+        return response.json();
+    };
 
-    const response = await fetch(url);
-    const data = await response.json();
+    let data = await request(fbEngagementAllowed ? FB_FIELDS_WITH_COUNTS : FB_FIELDS_BASE);
+
+    // Code 10 is the permission refusal. Retry without the engagement summaries
+    // rather than losing the whole feed over them.
+    if (data.error?.code === 10 && fbEngagementAllowed) {
+        console.warn('Facebook: like and comment counts need pages_read_user_content; continuing without them');
+        fbEngagementAllowed = false;
+        data = await request(FB_FIELDS_BASE);
+    }
 
     if (data.error) {
         const err = new Error(data.error.message);
@@ -147,18 +167,29 @@ const IG_API = process.env.IG_API_BASE || 'https://graph.facebook.com/v18.0';
 
 const IG_FIELDS = 'id,media_type,media_url,thumbnail_url,caption,timestamp,like_count,comments_count,permalink';
 
+// Captions run to many lines and often pad hashtags out with dot-only lines.
+// A card shows one line, so take the first that carries actual words. Split on
+// the newline character itself; trim() takes care of any carriage return.
+function captionTitle(caption, fallback) {
+    const line = (caption || '')
+        .split(String.fromCharCode(10))
+        .map(part => part.trim())
+        .find(part => /[\p{L}\p{N}]/u.test(part.replace(/[#@]\S+/gu, '')));
+    return line || fallback;
+}
+
 function mapInstagramItem(item) {
     return {
         id: item.id,
         platform: 'instagram',
-        title: item.caption || 'Instagram Post',
+        title: captionTitle(item.caption, 'Instagram post'),
         thumbnail: item.thumbnail_url || item.media_url,
         mediaUrl: item.media_url,
         mediaType: item.media_type, // PHOTO, VIDEO, CAROUSEL_ALBUM
         // A bare permalink will not load in an iframe; Instagram's public
         // embed view will.
         embedUrl: item.permalink ? `${item.permalink.replace(/\/$/, '')}/embed/` : null,
-        date: item.timestamp ? new Date(item.timestamp).toLocaleDateString() : '',
+        date: relativeDate(item.timestamp),
         likes: item.like_count || 0,
         views: null,
         comments: item.comments_count || 0,
