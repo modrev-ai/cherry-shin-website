@@ -2,13 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
 import { fetchMixedMedia, BackendUnreachableError } from '../services/mediaApi'
 import MediaCard from './MediaCard'
-import MediaModal from './MediaModal'
 
 function EndlessReels() {
     const [mediaItems, setMediaItems] = useState([])
     const [loading, setLoading] = useState(true)
     const [hasMore, setHasMore] = useState(true)
-    const [selectedItem, setSelectedItem] = useState(null)
     const [error, setError] = useState(null)
     const pageRef = useRef(0)
     const loadingRef = useRef(false)
@@ -104,7 +102,7 @@ function EndlessReels() {
 
             <div className="reels-grid">
                 {mediaItems.map((item, index) => (
-                    <MediaCard key={`${item.platform}-${item.id}-${item.cycleId}`} item={item} index={index} onClick={() => setSelectedItem(item)} />
+                    <MediaCard key={`${item.platform}-${item.id}-${item.cycleId}`} item={item} index={index} />
                 ))}
             </div>
 
@@ -131,10 +129,6 @@ function EndlessReels() {
 
             {/* Always-visible sentinel for infinite scroll trigger */}
             <div ref={loaderRef} style={{ height: '1px' }} />
-
-            {selectedItem && (
-                <MediaModal item={selectedItem} onClose={() => setSelectedItem(null)} />
-            )}
         </div>
     )
 }

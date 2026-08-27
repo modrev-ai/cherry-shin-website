@@ -16,7 +16,7 @@ function inlineSrc(embedUrl) {
     return `${embedUrl}${separator}autoplay=1&mute=1&playsinline=1&rel=0&controls=1${loop}`
 }
 
-function MediaCard({ item, index, onClick }) {
+function MediaCard({ item, index }) {
     const [loaded, setLoaded] = useState(false)
     const [error, setError] = useState(false)
     const [isActive, setIsActive] = useState(false)
@@ -97,33 +97,21 @@ function MediaCard({ item, index, onClick }) {
 
             <div className="media-info">
                 <h3 className="media-title">{item.title}</h3>
-                {item.embedUrl ? (
-                    <button
-                        type="button"
-                        className="watch-button"
-                        onClick={onClick}
-                        aria-label={`Play "${item.title}"`}
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path d="M8 5v14l11-7z" />
-                        </svg>
-                        Watch on {platformLabel(item.platform)}
-                    </button>
-                ) : (
-                    <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="watch-button"
-                        aria-label={`Watch "${item.title}" on ${platformLabel(item.platform)}`}
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path d="M8 5v14l11-7z" />
-                        </svg>
-                        Watch on {platformLabel(item.platform)}
-                    </a>
-                )}
+                <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="watch-button"
+                    aria-label={`Watch "${item.title}" on ${platformLabel(item.platform)} (opens a new tab)`}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M8 5v14l11-7z" />
+                    </svg>
+                    Watch on {platformLabel(item.platform)}
+                </a>
             </div>
+
+
 
         </div>
     )

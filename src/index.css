@@ -1316,12 +1316,21 @@ body {
   background: #000;
 }
 
-/* Landscape sources keep their shape inside the portrait frame */
+/* Landscape sources keep their shape inside the portrait frame, centred with
+   black above and below. `inset-block: auto` used to sit after `top`, and since
+   it resets both top and bottom it silently undid the centring. */
 .media-card--youtube .media-inline-player,
 .media-card--twitter .media-inline-player {
   top: 50%;
+  bottom: auto;
+  left: 0;
+  right: 0;
   height: auto;
   aspect-ratio: 16 / 9;
   transform: translateY(-50%);
-  inset-block: auto;
+}
+
+/* A view count is a readout, not a control */
+.reels-grid .action-btn--stat {
+  cursor: default;
 }
