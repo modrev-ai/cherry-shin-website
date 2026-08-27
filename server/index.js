@@ -223,9 +223,14 @@ function mapInstagramItem(item) {
         thumbnail: item.thumbnail_url || item.media_url,
         mediaUrl: item.media_url,
         mediaType: item.media_type, // PHOTO, VIDEO, CAROUSEL_ALBUM
-        // A bare permalink will not load in an iframe; Instagram's public
-        // embed view will.
-        embedUrl: item.permalink ? `${item.permalink.replace(/\/$/, '')}/embed/` : null,
+        // Deliberately not embedded. Reels return no media_url, so a native
+        // player is impossible, and every Instagram embed variant renders the
+        // full post chrome - avatar, username, Follow button - which crowds out
+        // the video in a feed built around it. Cropping that away would also
+        // strip the attribution the embed exists to carry. The card shows the
+        // still and its watch button instead, the same treatment given to a
+        // Facebook post that refuses to embed.
+        embedUrl: null,
         date: relativeDate(item.timestamp),
         likes: item.like_count || 0,
         views: null,
