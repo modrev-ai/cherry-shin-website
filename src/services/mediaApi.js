@@ -403,45 +403,55 @@ function interleaveByPlatform(items) {
 
 const ITEMS_PER_PAGE = 6;
 
+// Pulls one platform's feed from the backend. The server normalises every
+// platform into the same item shape, so nothing needs remapping here. An
+// unconfigured or unreachable endpoint yields an empty list and the caller
+// falls back to mock content for that platform only.
+async function fetchLive(path, label) {
+    try {
+        const response = await fetch(`${API_BASE}${path}`);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data.data || [];
+    } catch (err) {
+        console.warn(`Failed to fetch ${label} from API, using mock data:`, err);
+        return [];
+    }
+}
+
 export async function fetchMixedMedia(page = 0) {
     try {
-        // Fetch Instagram media from backend API
-        let instagramItems = [];
-        try {
-            const response = await fetch(`${API_BASE}/instagram/media?limit=${ITEMS_PER_PAGE * 2}`);
-            if (response.ok) {
-                const data = await response.json();
-                // The Graph API names these differently to our mock shape
-                instagramItems = (data.data || []).map(item => ({
-                    ...item,
-                    platform: 'instagram',
-                    likes: item.like_count,
-                    comments: item.comments_count,
-                }));
-            }
-        } catch (err) {
-            console.warn('Failed to fetch Instagram from API, using mock data:', err);
-        }
+        const perPlatform = ITEMS_PER_PAGE * 2;
 
-        // Combine mock TikTok/YouTube with real or mock Instagram
-        const mockContent = instagramItems.length > 0
-            ? [...tiktokContent, ...youtubeContent, ...instagramItems]
-            : allContent;
+        const [instagramItems, youtubeItems] = await Promise.all([
+            fetchLive(`/instagram/media?limit=${perPlatform}`, 'Instagram'),
+            fetchLive(`/youtube/videos?limit=${perPlatform}`, 'YouTube'),
+        ]);
+
+        // Live data where a platform is connected, mock where it is not, so the
+        // feed stays whole while the remaining platforms are still being set up.
+        const pool = [
+            ...tiktokContent,
+            ...facebookContent,
+            ...twitterContent,
+            ...(youtubeItems.length ? youtubeItems : youtubeContent),
+            ...(instagramItems.length ? instagramItems : instagramContent),
+        ];
 
         // Simulate slight delay for smooth UX
         await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 300));
 
         // Endless scrolling: cycle through the content pool, re-interleaved each page
-        const ordered = interleaveByPlatform(mockContent);
+        const ordered = interleaveByPlatform(pool);
 
         // If we've cycled through all items, start over with a new shuffle
-        const start = (page % Math.ceil(mockContent.length / ITEMS_PER_PAGE)) * ITEMS_PER_PAGE;
+        const start = (page % Math.ceil(pool.length / ITEMS_PER_PAGE)) * ITEMS_PER_PAGE;
         const end = start + ITEMS_PER_PAGE;
 
         // If we need more items than the pool, wrap around
         let result = [];
         for (let i = start; i < end; i++) {
-            const idx = i % mockContent.length;
+            const idx = i % pool.length;
             // Add a unique suffix to prevent React key conflicts on repeat cycles
             const item = { ...ordered[idx], cycleId: `${page}-${i}` };
             result.push(item);

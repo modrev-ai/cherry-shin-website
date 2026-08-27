@@ -29,6 +29,11 @@ const TOKEN_CACHE_FILE = join(__dirname, 'token_cache.json');
 // regardless of how many visitors arrive in it.
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS) || 10 * 60 * 1000;
 
+// YouTube Data API v3 - public channel data, so an API key is enough.
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
+const YT_API = process.env.YT_API_BASE || 'https://www.googleapis.com/youtube/v3';
+
 app.use(cors());
 app.use(express.json());
 
@@ -88,6 +93,87 @@ async function fetchInstagramMedia(token, { limit = 12, after = null } = {}) {
         data: (data.data || []).map(mapInstagramItem),
         paging: data.paging || null,
     };
+}
+
+// Feed-style relative date, matching how the rest of the feed reads.
+function relativeDate(iso) {
+    if (!iso) return '';
+    const then = new Date(iso).getTime();
+    if (Number.isNaN(then)) return '';
+    const days = Math.floor((Date.now() - then) / 86400000);
+    if (days <= 0) return 'today';
+    if (days === 1) return '1 day ago';
+    if (days < 7) return `${days} days ago`;
+    if (days < 14) return '1 week ago';
+    if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+    if (days < 60) return '1 month ago';
+    if (days < 365) return `${Math.floor(days / 30)} months ago`;
+    return `${Math.floor(days / 365)} year${days < 730 ? '' : 's'} ago`;
+}
+
+async function ytGet(path, params) {
+    const url = `${YT_API}/${path}?` + new URLSearchParams({ ...params, key: YOUTUBE_API_KEY });
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data.error) {
+        const err = new Error(data.error.message);
+        err.isUpstream = true;
+        throw err;
+    }
+    return data;
+}
+
+// A channel's uploads live in a playlist whose id is the channel id with the
+// UC prefix swapped for UU. playlistItems.list costs 1 quota unit; search.list
+// would cost 100, which is why it is avoided here.
+function uploadsPlaylistId(channelId) {
+    return channelId.replace(/^UC/, 'UU');
+}
+
+async function fetchYouTubeVideos({ limit = 12 } = {}) {
+    const playlist = await ytGet('playlistItems', {
+        part: 'snippet,contentDetails',
+        playlistId: uploadsPlaylistId(YOUTUBE_CHANNEL_ID),
+        maxResults: String(Math.min(limit, 50)),
+    });
+
+    const ids = (playlist.items || [])
+        .map(item => item.contentDetails?.videoId)
+        .filter(Boolean);
+
+    // Second call (1 more unit) so the action rail has real view/like counts,
+    // which playlistItems does not return.
+    let statsById = {};
+    if (ids.length) {
+        const stats = await ytGet('videos', {
+            part: 'statistics',
+            id: ids.join(','),
+        });
+        statsById = Object.fromEntries((stats.items || []).map(v => [v.id, v.statistics || {}]));
+    }
+
+    const items = (playlist.items || []).map(item => {
+        const snippet = item.snippet || {};
+        const videoId = item.contentDetails?.videoId;
+        const thumbs = snippet.thumbnails || {};
+        const best = thumbs.maxres || thumbs.standard || thumbs.high || thumbs.medium || thumbs.default;
+        const stat = statsById[videoId] || {};
+
+        return {
+            id: videoId,
+            platform: 'youtube',
+            title: snippet.title || 'YouTube video',
+            thumbnail: best?.url || null,
+            embedUrl: videoId ? `https://www.youtube.com/embed/${videoId}` : null,
+            date: relativeDate(snippet.publishedAt),
+            likes: Number(stat.likeCount) || 0,
+            views: Number(stat.viewCount) || 0,
+            comments: Number(stat.commentCount) || 0,
+            url: videoId ? `https://www.youtube.com/watch?v=${videoId}` : null,
+        };
+    }).filter(item => item.id && item.thumbnail);
+
+    return { data: items, paging: playlist.nextPageToken ? { next: playlist.nextPageToken } : null };
 }
 
 // Tell the caller (and any CDN in front) how the response was served.
@@ -183,6 +269,28 @@ app.get('/api/instagram/media/next', async (req, res) => {
     }
 });
 
+// Endpoint: get YouTube uploads
+app.get('/api/youtube/videos', async (req, res) => {
+    try {
+        const limit = Number(req.query.limit) || 12;
+
+        if (isPlaceholderToken(YOUTUBE_API_KEY) || isPlaceholderToken(YOUTUBE_CHANNEL_ID)) {
+            return res.status(500).json({ error: 'YouTube not configured. Set YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID in .env' });
+        }
+
+        const result = await cached(
+            `yt:videos:${limit}`,
+            () => fetchYouTubeVideos({ limit }),
+            { ttlMs: CACHE_TTL_MS }
+        );
+
+        return sendCached(res, result);
+    } catch (error) {
+        console.error('Error fetching YouTube videos:', error.message);
+        return res.status(502).json({ error: 'YouTube API error', message: error.message });
+    }
+});
+
 // Endpoint: cache visibility, for checking that upstream calls stay flat
 // as traffic grows.
 app.get('/api/cache/stats', (req, res) => {
@@ -192,4 +300,5 @@ app.get('/api/cache/stats', (req, res) => {
 app.listen(PORT, () => {
     console.log(`API Server running on http://localhost:${PORT}`);
     console.log(`Instagram token: ${isPlaceholderToken(IG_ACCESS_TOKEN) ? 'NOT CONFIGURED - set IG_ACCESS_TOKEN in .env' : 'Configured'}`);
+    console.log(`YouTube API key: ${isPlaceholderToken(YOUTUBE_API_KEY) ? 'NOT CONFIGURED - set YOUTUBE_API_KEY in .env' : 'Configured'}`);
 });
