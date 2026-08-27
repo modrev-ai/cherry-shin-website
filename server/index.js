@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { cached, getStats } from './cache.js';
 
 dotenv.config();
@@ -364,8 +364,17 @@ app.get('/api/cache/stats', (req, res) => {
     res.json({ ttlMs: CACHE_TTL_MS, ...getStats() });
 });
 
-app.listen(PORT, () => {
-    console.log(`API Server running on http://localhost:${PORT}`);
-    console.log(`Instagram token: ${isPlaceholderToken(IG_ACCESS_TOKEN) ? 'NOT CONFIGURED - set IG_ACCESS_TOKEN in .env' : 'Configured'}`);
-    console.log(`YouTube API key: ${isPlaceholderToken(YOUTUBE_API_KEY) ? 'NOT CONFIGURED - set YOUTUBE_API_KEY in .env' : 'Configured'}`);
-});
+// Serverless platforms import the app and invoke it per request; only a direct
+// `node server/index.js` should bind a port. Keeping one implementation means
+// local dev and production cannot drift apart.
+const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(__filename);
+
+if (isDirectRun) {
+    app.listen(PORT, () => {
+        console.log(`API Server running on http://localhost:${PORT}`);
+        console.log(`Instagram token: ${isPlaceholderToken(IG_ACCESS_TOKEN) ? 'NOT CONFIGURED - set IG_ACCESS_TOKEN in .env' : 'Configured'}`);
+        console.log(`YouTube API key: ${isPlaceholderToken(YOUTUBE_API_KEY) ? 'NOT CONFIGURED - set YOUTUBE_API_KEY in .env' : 'Configured'}`);
+    });
+}
+
+export default app;

@@ -30,3 +30,6 @@ dist-ssr
 
 # One-off Linktree scrape, not app source
 linktree_output.html
+
+# Vercel
+.vercel

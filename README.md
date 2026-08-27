@@ -99,6 +99,42 @@ To fetch real Instagram posts:
    npm run dev
    ```
 
+## Deployment (Vercel)
+
+The site deploys as a static frontend plus one serverless function.
+
+* `api/[...path].js` delegates every `/api/*` request to the same Express app
+  used in local development, so there is a single implementation.
+* `server/index.js` exports that app and only binds a port when run directly,
+  which is what keeps it usable in both places.
+* `vercel.json` builds with Vite to `dist` and leaves `/api/*` to the function.
+
+### Connecting the project
+
+1. In Vercel, **Add New → Project** and import `modrev-ai/cherry-shin-website`.
+   The settings in `vercel.json` are picked up automatically.
+2. Add the environment variables under **Settings → Environment Variables**:
+
+   | Variable | Needed for |
+   | --- | --- |
+   | `YOUTUBE_API_KEY` | live YouTube feed |
+   | `YOUTUBE_CHANNEL_ID` | live YouTube feed |
+   | `IG_ACCESS_TOKEN` | live Instagram feed (optional) |
+   | `IG_USER_ID` | live Instagram feed (optional) |
+   | `CACHE_TTL_MS` | optional, defaults to 10 minutes |
+
+   Anything left unset falls back to sample content for that platform; the site
+   still builds and runs.
+3. Deploy. Pushes to `main` deploy automatically once the repo is connected.
+
+### A caveat on caching
+
+`server/cache.js` keeps its cache in memory, which on serverless lasts only for
+the life of an instance. A cold start begins with an empty cache and calls
+upstream again, so the request-to-upstream ratio is worse than it is locally.
+At this traffic it stays far inside the free YouTube quota, but a shared cache
+(Vercel KV or similar) would be the fix if that changes.
+
 ## Social Media Links
 
 - **Instagram:** [@itscherryshin](https://www.instagram.com/itscherryshin/)

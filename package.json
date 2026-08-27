@@ -12,6 +12,9 @@
     "prepare": "node scripts/install-hooks.mjs"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
