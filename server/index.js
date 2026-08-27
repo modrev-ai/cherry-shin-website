@@ -176,6 +176,60 @@ async function fetchYouTubeVideos({ limit = 12 } = {}) {
     return { data: items, paging: playlist.nextPageToken ? { next: playlist.nextPageToken } : null };
 }
 
+// Aggregate audience stats across whatever platforms are configured. Each
+// platform contributes only if its credentials are present, so this fills out
+// as more are connected rather than needing a rewrite each time.
+async function fetchAudienceStats() {
+    const platforms = {};
+
+    if (!isPlaceholderToken(YOUTUBE_API_KEY) && !isPlaceholderToken(YOUTUBE_CHANNEL_ID)) {
+        const data = await ytGet('channels', {
+            part: 'statistics',
+            id: YOUTUBE_CHANNEL_ID,
+        });
+        const stat = data.items?.[0]?.statistics;
+        if (stat) {
+            platforms.youtube = {
+                // YouTube hides exact counts for some channels; treat that as unknown
+                // rather than reporting zero followers.
+                followers: stat.hiddenSubscriberCount ? null : Number(stat.subscriberCount) || 0,
+                posts: Number(stat.videoCount) || 0,
+                views: Number(stat.viewCount) || 0,
+            };
+        }
+    }
+
+    if (!isPlaceholderToken(IG_ACCESS_TOKEN)) {
+        const url = `${IG_API}/${IG_USER_ID}?fields=followers_count,media_count&access_token=${IG_ACCESS_TOKEN}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!data.error) {
+            platforms.instagram = {
+                followers: Number(data.followers_count) || 0,
+                posts: Number(data.media_count) || 0,
+                views: null,
+            };
+        }
+    }
+
+    const sum = (field) => {
+        const values = Object.values(platforms)
+            .map(p => p[field])
+            .filter(v => typeof v === 'number');
+        return values.length ? values.reduce((a, b) => a + b, 0) : null;
+    };
+
+    return {
+        totals: {
+            followers: sum('followers'),
+            posts: sum('posts'),
+            views: sum('views'),
+        },
+        platforms,
+        connected: Object.keys(platforms),
+    };
+}
+
 // Tell the caller (and any CDN in front) how the response was served.
 function sendCached(res, result) {
     const label = { store: 'HIT', upstream: 'MISS', stale: 'STALE' };
@@ -288,6 +342,17 @@ app.get('/api/youtube/videos', async (req, res) => {
     } catch (error) {
         console.error('Error fetching YouTube videos:', error.message);
         return res.status(502).json({ error: 'YouTube API error', message: error.message });
+    }
+});
+
+// Endpoint: audience stats for the hero
+app.get('/api/stats', async (req, res) => {
+    try {
+        const result = await cached('stats:audience', fetchAudienceStats, { ttlMs: CACHE_TTL_MS });
+        return sendCached(res, result);
+    } catch (error) {
+        console.error('Error fetching audience stats:', error.message);
+        return res.status(502).json({ error: 'Failed to fetch stats', message: error.message });
     }
 });
 

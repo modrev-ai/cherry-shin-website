@@ -1,7 +1,7 @@
 // Media API service - fetches mixed content from all social platforms
 // Integrates with backend server for Instagram API, uses mock data for TikTok/YouTube
 
-const API_BASE = 'http://localhost:3001/api';
+export const API_BASE = 'http://localhost:3001/api';
 
 const tiktokContent = [
     {
@@ -263,7 +263,7 @@ const facebookContent = [
     {
         id: 'fb2',
         platform: 'facebook',
-        title: 'Thank you for 500K! ❤️',
+        title: 'Thank you all for the support ❤️',
         thumbnail: 'https://picsum.photos/seed/csfb2/600/750',
         embedUrl: null,
         date: '1 week ago',
