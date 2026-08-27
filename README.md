@@ -12,7 +12,7 @@ A full-screen reel feed that mirrors Cherry Shin's posts from several social pla
 | --- | --- | --- |
 | YouTube | **Live** | already configured |
 | Instagram | Wired, not configured | `IG_ACCESS_TOKEN` + `IG_USER_ID` |
-| TikTok | **Live once post URLs are set** | `TIKTOK_POST_URLS` |
+| TikTok | Two routes: Display API, or oEmbed | `TIKTOK_CLIENT_*` / `TIKTOK_POST_URLS` |
 | Facebook | Wired, not configured | `FB_PAGE_ID` + `FB_PAGE_ACCESS_TOKEN` |
 | X | Sample content | paid API tier |
 
@@ -122,7 +122,10 @@ to sample content.
 | `YOUTUBE_CHANNEL_ID` | channel to mirror |
 | `IG_ACCESS_TOKEN` | Instagram Graph API token |
 | `IG_USER_ID` | Instagram account id — **required with the token, not optional** |
-| `TIKTOK_POST_URLS` | TikTok post URLs to mirror, comma/space/newline separated |
+| `TIKTOK_POST_URLS` | TikTok post URLs to mirror (oEmbed route), comma/space/newline separated |
+| `TIKTOK_CLIENT_KEY` | TikTok Display API client key |
+| `TIKTOK_CLIENT_SECRET` | TikTok Display API client secret |
+| `TIKTOK_REFRESH_TOKEN` | TikTok refresh token from the one-off OAuth |
 | `FB_PAGE_ID` | Facebook Page id |
 | `FB_PAGE_ACCESS_TOKEN` | Facebook **Page** access token, not a user token |
 | `CACHE_TTL_MS` | cache freshness window, default 600000 |

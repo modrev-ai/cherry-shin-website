@@ -164,6 +164,97 @@ async function fetchFacebookPosts({ limit = 12 } = {}) {
     return { data: items, paging: data.paging || null };
 }
 
+// Access tokens last about a day, so one is held in memory and refreshed a
+// little early rather than on every request. On serverless this lives only for
+// the life of an instance, which is fine: a cold start simply refreshes again.
+let tiktokToken = null; // { value, expiresAt }
+
+async function tiktokAccessToken() {
+    if (tiktokToken && Date.now() < tiktokToken.expiresAt) return tiktokToken.value;
+
+    const body = new URLSearchParams({
+        client_key: TIKTOK_CLIENT_KEY,
+        client_secret: TIKTOK_CLIENT_SECRET,
+        grant_type: 'refresh_token',
+        refresh_token: TIKTOK_REFRESH_TOKEN,
+    });
+
+    const response = await fetch(`${TIKTOK_API}/oauth/token/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+    });
+    const data = await response.json();
+
+    if (!data.access_token) {
+        const err = new Error(data.error_description || data.error || 'TikTok token refresh failed');
+        err.isUpstream = true;
+        throw err;
+    }
+
+    // TikTok rotates the refresh token on use. The configured one stays valid
+    // for its full year, so nothing breaks by ignoring the new one, but log it
+    // once so it can be persisted deliberately rather than silently lost.
+    if (data.refresh_token && data.refresh_token !== TIKTOK_REFRESH_TOKEN) {
+        console.warn('TikTok returned a rotated refresh token; update TIKTOK_REFRESH_TOKEN when convenient');
+    }
+
+    const ttlMs = (Number(data.expires_in) || 86400) * 1000;
+    tiktokToken = { value: data.access_token, expiresAt: Date.now() + ttlMs - 60_000 };
+    return tiktokToken.value;
+}
+
+const TIKTOK_VIDEO_FIELDS = [
+    'id', 'title', 'video_description', 'create_time', 'cover_image_url',
+    'share_url', 'embed_link', 'duration', 'width', 'height',
+    'like_count', 'comment_count', 'share_count', 'view_count',
+].join(',');
+
+function mapTikTokVideo(v) {
+    const width = Number(v.width) || 0;
+    const height = Number(v.height) || 0;
+    return {
+        id: String(v.id),
+        platform: 'tiktok',
+        title: captionTitle(v.title || v.video_description, 'TikTok post'),
+        thumbnail: v.cover_image_url || null,
+        embedLink: v.embed_link || null,
+        embedUrl: v.embed_link || (v.id ? `https://www.tiktok.com/embed/v2/${v.id}` : null),
+        date: relativeDate(v.create_time ? new Date(v.create_time * 1000).toISOString() : null),
+        likes: Number(v.like_count) || 0,
+        views: Number(v.view_count) || 0,
+        comments: Number(v.comment_count) || 0,
+        shares: Number(v.share_count) || 0,
+        orientation: width && height && width > height ? 'landscape' : 'portrait',
+        url: v.share_url || (v.id ? `https://www.tiktok.com/@/video/${v.id}` : null),
+    };
+}
+
+async function fetchTikTokVideos({ limit = 12 } = {}) {
+    const token = await tiktokAccessToken();
+    const response = await fetch(`${TIKTOK_API}/video/list/?fields=${TIKTOK_VIDEO_FIELDS}`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ max_count: Math.min(limit, 20) }),
+    });
+    const data = await response.json();
+
+    if (data.error && data.error.code && data.error.code !== 'ok') {
+        const err = new Error(data.error.message || data.error.code);
+        err.isUpstream = true;
+        throw err;
+    }
+
+    const videos = data.data?.videos || [];
+    return {
+        data: videos.map(mapTikTokVideo).filter(item => item.thumbnail),
+        paging: data.data?.has_more ? { cursor: data.data.cursor } : null,
+    };
+}
+
 // TikTok's Display API needs OAuth and app review, and only works with the
 // developer's own account until it passes. The public oEmbed endpoint needs
 // neither, but it resolves one post at a time, so the posts to mirror are
@@ -177,6 +268,20 @@ const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
 
 const isFacebookConfigured = () =>
     !isPlaceholderToken(FB_PAGE_ACCESS_TOKEN) && !isPlaceholderToken(FB_PAGE_ID);
+
+// Display API: lists the account's videos with engagement counts, the same
+// shape of integration as YouTube and Meta. Needs a TikTok for Developers app
+// and one OAuth authorisation by the account owner; oEmbed below stays as the
+// fallback for when none of that is configured.
+const TIKTOK_API = process.env.TIKTOK_API_BASE || 'https://open.tiktokapis.com/v2';
+const TIKTOK_CLIENT_KEY = process.env.TIKTOK_CLIENT_KEY;
+const TIKTOK_CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET;
+const TIKTOK_REFRESH_TOKEN = process.env.TIKTOK_REFRESH_TOKEN;
+
+const isTikTokApiConfigured = () =>
+    !isPlaceholderToken(TIKTOK_CLIENT_KEY)
+    && !isPlaceholderToken(TIKTOK_CLIENT_SECRET)
+    && !isPlaceholderToken(TIKTOK_REFRESH_TOKEN);
 
 const TIKTOK_OEMBED = process.env.TIKTOK_OEMBED_BASE || 'https://www.tiktok.com/oembed';
 const TIKTOK_POST_URLS = (process.env.TIKTOK_POST_URLS || '')
@@ -473,6 +578,26 @@ async function fetchAudienceStats() {
         }
     }
 
+    if (isTikTokApiConfigured()) {
+        try {
+            const token = await tiktokAccessToken();
+            const r = await fetch(`${TIKTOK_API}/user/info/?fields=follower_count,video_count,likes_count`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const d = await r.json();
+            const u = d.data?.user;
+            if (u) {
+                platforms.tiktok = {
+                    followers: Number(u.follower_count) || 0,
+                    posts: Number(u.video_count) || 0,
+                    views: null,
+                };
+            }
+        } catch (err) {
+            console.warn('TikTok stats unavailable:', err.message);
+        }
+    }
+
     const sum = (field) => {
         const values = Object.values(platforms)
             .map(p => p[field])
@@ -633,20 +758,29 @@ app.get('/api/tiktok/posts', async (req, res) => {
     try {
         const limit = Number(req.query.limit) || 12;
 
-        if (TIKTOK_POST_URLS.length === 0) {
-            return res.status(500).json({ error: 'TikTok not configured. Set TIKTOK_POST_URLS in .env' });
+        // The Display API lists the account's videos and carries engagement
+        // counts, so it wins when configured. oEmbed needs no credentials but
+        // only resolves the post URLs it is given.
+        const useApi = isTikTokApiConfigured();
+
+        if (!useApi && TIKTOK_POST_URLS.length === 0) {
+            return res.status(500).json({
+                error: 'TikTok not configured. Set TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET and '
+                    + 'TIKTOK_REFRESH_TOKEN for the Display API, or TIKTOK_POST_URLS for oEmbed.',
+            });
         }
 
         const result = await cached(
-            `tiktok:posts:${limit}`,
-            () => fetchTikTokPosts({ limit }),
+            useApi ? `tiktok:api:${limit}` : `tiktok:oembed:${limit}`,
+            () => (useApi ? fetchTikTokVideos({ limit }) : fetchTikTokPosts({ limit })),
             { ttlMs: CACHE_TTL_MS }
         );
 
+        res.set('X-TikTok-Source', useApi ? 'display-api' : 'oembed');
         return sendCached(res, result);
     } catch (error) {
         console.error('Error fetching TikTok posts:', error.message);
-        return res.status(502).json({ error: 'TikTok oEmbed error', message: error.message });
+        return res.status(502).json({ error: 'TikTok error', message: error.message });
     }
 });
 
@@ -677,7 +811,11 @@ if (isDirectRun) {
         console.log(`API Server running on http://localhost:${PORT}`);
         console.log(`Instagram: ${isInstagramConfigured() ? 'Configured' : 'NOT CONFIGURED - set IG_ACCESS_TOKEN and IG_USER_ID in .env'}`);
         console.log(`YouTube API key: ${isPlaceholderToken(YOUTUBE_API_KEY) ? 'NOT CONFIGURED - set YOUTUBE_API_KEY in .env' : 'Configured'}`);
-    console.log(`TikTok: ${TIKTOK_POST_URLS.length ? `${TIKTOK_POST_URLS.length} post(s) configured` : 'NOT CONFIGURED - set TIKTOK_POST_URLS in .env'}`);
+    console.log(`TikTok: ${isTikTokApiConfigured()
+        ? 'Display API configured'
+        : TIKTOK_POST_URLS.length
+            ? `oEmbed, ${TIKTOK_POST_URLS.length} post(s) configured`
+            : 'NOT CONFIGURED - set the Display API keys or TIKTOK_POST_URLS in .env'}`);
     console.log(`Facebook: ${isFacebookConfigured() ? 'Configured' : 'NOT CONFIGURED - set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN in .env'}`);
     });
 }
