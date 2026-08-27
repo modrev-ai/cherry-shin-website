@@ -62,7 +62,9 @@ function mapInstagramItem(item) {
         thumbnail: item.thumbnail_url || item.media_url,
         mediaUrl: item.media_url,
         mediaType: item.media_type, // PHOTO, VIDEO, CAROUSEL_ALBUM
-        embedUrl: item.permalink,
+        // A bare permalink will not load in an iframe; Instagram's public
+        // embed view will.
+        embedUrl: item.permalink ? `${item.permalink.replace(/\/$/, '')}/embed/` : null,
         date: item.timestamp ? new Date(item.timestamp).toLocaleDateString() : '',
         likes: item.like_count || 0,
         views: null,

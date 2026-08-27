@@ -1,7 +1,10 @@
 // Media API service - fetches mixed content from all social platforms
 // Integrates with backend server for Instagram API, uses mock data for TikTok/YouTube
 
-export const API_BASE = 'http://localhost:3001/api';
+// Relative by default so the deployed site talks to its own origin. Set
+// VITE_API_BASE at build time when the backend lives elsewhere. In dev, Vite
+// proxies /api to the backend port (see vite.config.js).
+export const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 const tiktokContent = [
     {
@@ -407,16 +410,50 @@ const ITEMS_PER_PAGE = 6;
 // platform into the same item shape, so nothing needs remapping here. An
 // unconfigured or unreachable endpoint yields an empty list and the caller
 // falls back to mock content for that platform only.
+// Raised when the backend itself cannot be reached, as opposed to a platform
+// simply not being configured yet. The two need different handling: an
+// unconfigured platform falls back to sample content, whereas an unreachable
+// backend must surface as an error rather than quietly showing invented posts.
+export class BackendUnreachableError extends Error {
+    constructor(cause) {
+        super('Backend unreachable');
+        this.name = 'BackendUnreachableError';
+        this.cause = cause;
+    }
+}
+
 async function fetchLive(path, label) {
+    let response;
     try {
-        const response = await fetch(`${API_BASE}${path}`);
-        if (!response.ok) return [];
-        const data = await response.json();
-        return data.data || [];
+        response = await fetch(`${API_BASE}${path}`);
     } catch (err) {
-        console.warn(`Failed to fetch ${label} from API, using mock data:`, err);
+        // fetch only rejects on a network-level failure
+        throw new BackendUnreachableError(err);
+    }
+
+    if (!response.ok) {
+        // A dead backend usually surfaces as a 5xx from whatever proxy sits in
+        // front of it, not as a network error, so the status alone cannot tell
+        // the two apart. Our own error responses are JSON with an `error` key;
+        // a proxy's are not. Use that to distinguish "platform not configured"
+        // from "nothing is answering behind the proxy".
+        let body = null;
+        try {
+            body = await response.json();
+        } catch {
+            throw new BackendUnreachableError(new Error(`Bad gateway (${response.status})`));
+        }
+
+        if (!body || typeof body.error !== 'string') {
+            throw new BackendUnreachableError(new Error(`Unexpected response (${response.status})`));
+        }
+
+        console.warn(`${label} unavailable (${response.status}): ${body.error}`);
         return [];
     }
+
+    const data = await response.json();
+    return data.data || [];
 }
 
 export async function fetchMixedMedia(page = 0) {
@@ -459,6 +496,9 @@ export async function fetchMixedMedia(page = 0) {
 
         return result;
     } catch (error) {
+        // A dead backend must reach the UI so it can offer a retry, rather than
+        // being flattened into "no more content" or masked by sample posts.
+        if (error instanceof BackendUnreachableError) throw error;
         console.error('fetchMixedMedia error:', error);
         return [];
     }
