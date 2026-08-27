@@ -12,7 +12,7 @@ A full-screen reel feed that mirrors Cherry Shin's posts from several social pla
 | --- | --- | --- |
 | YouTube | **Live** | already configured |
 | Instagram | Wired, not configured | `IG_ACCESS_TOKEN` + `IG_USER_ID` |
-| TikTok | Sample content | oEmbed integration (no credentials required) |
+| TikTok | **Live once post URLs are set** | `TIKTOK_POST_URLS` |
 | Facebook | Sample content | Page token via the same Meta app as Instagram |
 | X | Sample content | paid API tier |
 
@@ -122,6 +122,7 @@ to sample content.
 | `YOUTUBE_CHANNEL_ID` | channel to mirror |
 | `IG_ACCESS_TOKEN` | Instagram Graph API token |
 | `IG_USER_ID` | Instagram account id — **required with the token, not optional** |
+| `TIKTOK_POST_URLS` | TikTok post URLs to mirror, comma/space/newline separated |
 | `CACHE_TTL_MS` | cache freshness window, default 600000 |
 | `PORT` | API port, default 3001 |
 | `YT_API_BASE`, `IG_API_BASE` | override upstream base URLs, for testing |
@@ -168,12 +169,28 @@ You must be an admin of the Page. Grant `pages_read_engagement` and `pages_show_
 generate a **Page** access token, not a user token. Needs a route adding, following the Instagram
 one.
 
-### TikTok — oEmbed is the cheap path
+### TikTok — built, needs post URLs
 
-TikTok's Display API needs a full OAuth flow and app review, and only works with the developer's
-own account until it passes. Its **public oEmbed endpoint needs no auth and no review**: give it a
-post URL and it returns thumbnail and embed data. The tradeoff is curating post URLs rather than
-discovering new posts automatically.
+Implemented via TikTok's **public oEmbed endpoint**: no credentials, no OAuth, no app review. Set
+`TIKTOK_POST_URLS` to the posts you want mirrored, separated by commas, spaces or newlines:
+
+```
+TIKTOK_POST_URLS=https://www.tiktok.com/@itscherryshin/video/123, https://www.tiktok.com/@itscherryshin/video/456
+```
+
+The Display API would discover posts automatically, but it needs a full OAuth flow plus app
+review, and works only with the developer's own account until it passes. oEmbed resolves one post
+at a time, which is why the list is explicit — the cost is adding a URL when Cherry posts.
+
+Two things it does not give you:
+
+- **No engagement figures and no publish date.** Those fields are left unset rather than invented,
+  so TikTok cards show no counts and no date.
+- **No automatic discovery.** New posts do not appear until their URL is added.
+
+A post that cannot be resolved — deleted, private, mistyped — is skipped and logged, costing one
+card rather than the whole feed. The embed uses `tiktok.com/embed/v2/{id}`, since the HTML oEmbed
+returns is a blockquote plus TikTok's widget script and will not load in the feed's iframe player.
 
 ### X — needs a paid tier
 

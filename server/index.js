@@ -43,6 +43,16 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 const YT_API = process.env.YT_API_BASE || 'https://www.googleapis.com/youtube/v3';
 
+// TikTok's Display API needs OAuth and app review, and only works with the
+// developer's own account until it passes. The public oEmbed endpoint needs
+// neither, but it resolves one post at a time, so the posts to mirror are
+// listed explicitly rather than discovered.
+const TIKTOK_OEMBED = process.env.TIKTOK_OEMBED_BASE || 'https://www.tiktok.com/oembed';
+const TIKTOK_POST_URLS = (process.env.TIKTOK_POST_URLS || '')
+    .split(/[\s,]+/)
+    .map(url => url.trim())
+    .filter(url => url.startsWith('http'));
+
 app.use(cors());
 app.use(express.json());
 
@@ -217,6 +227,56 @@ async function fetchYouTubeVideos({ limit = 12 } = {}) {
     return { data: items, paging: playlist.nextPageToken ? { next: playlist.nextPageToken } : null };
 }
 
+// oEmbed carries no engagement figures and no publish date, so those fields are
+// left unset rather than invented. A post that fails to resolve is dropped
+// instead of failing the whole feed: a deleted or private video should cost one
+// card, not all of them.
+async function fetchTikTokPost(postUrl) {
+    const response = await fetch(`${TIKTOK_OEMBED}?url=${encodeURIComponent(postUrl)}`, {
+        signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const videoId = data.embed_product_id;
+    if (!videoId) return null;
+
+    // The html oEmbed returns is a blockquote plus TikTok's widget script, which
+    // will not work inside the feed's iframe player. The embed view will.
+    const width = Number(data.thumbnail_width) || 0;
+    const height = Number(data.thumbnail_height) || 0;
+
+    return {
+        id: videoId,
+        platform: 'tiktok',
+        title: data.title || 'TikTok post',
+        thumbnail: data.thumbnail_url || null,
+        embedUrl: `https://www.tiktok.com/embed/v2/${videoId}`,
+        date: '',
+        likes: null,
+        views: null,
+        comments: null,
+        orientation: width && height && width > height ? 'landscape' : 'portrait',
+        url: postUrl,
+    };
+}
+
+async function fetchTikTokPosts({ limit = 12 } = {}) {
+    const wanted = TIKTOK_POST_URLS.slice(0, limit);
+    const settled = await Promise.allSettled(wanted.map(fetchTikTokPost));
+
+    const items = settled
+        .filter(result => result.status === 'fulfilled' && result.value)
+        .map(result => result.value);
+
+    const dropped = wanted.length - items.length;
+    if (dropped > 0) {
+        console.warn(`TikTok: ${dropped} of ${wanted.length} posts could not be resolved`);
+    }
+
+    return { data: items, paging: null };
+}
+
 // Aggregate audience stats across whatever platforms are configured. Each
 // platform contributes only if its credentials are present, so this fills out
 // as more are connected rather than needing a rewrite each time.
@@ -386,6 +446,28 @@ app.get('/api/youtube/videos', async (req, res) => {
     }
 });
 
+// Endpoint: get TikTok posts
+app.get('/api/tiktok/posts', async (req, res) => {
+    try {
+        const limit = Number(req.query.limit) || 12;
+
+        if (TIKTOK_POST_URLS.length === 0) {
+            return res.status(500).json({ error: 'TikTok not configured. Set TIKTOK_POST_URLS in .env' });
+        }
+
+        const result = await cached(
+            `tiktok:posts:${limit}`,
+            () => fetchTikTokPosts({ limit }),
+            { ttlMs: CACHE_TTL_MS }
+        );
+
+        return sendCached(res, result);
+    } catch (error) {
+        console.error('Error fetching TikTok posts:', error.message);
+        return res.status(502).json({ error: 'TikTok oEmbed error', message: error.message });
+    }
+});
+
 // Endpoint: audience stats for the hero
 app.get('/api/stats', async (req, res) => {
     try {
@@ -413,6 +495,7 @@ if (isDirectRun) {
         console.log(`API Server running on http://localhost:${PORT}`);
         console.log(`Instagram: ${isInstagramConfigured() ? 'Configured' : 'NOT CONFIGURED - set IG_ACCESS_TOKEN and IG_USER_ID in .env'}`);
         console.log(`YouTube API key: ${isPlaceholderToken(YOUTUBE_API_KEY) ? 'NOT CONFIGURED - set YOUTUBE_API_KEY in .env' : 'Configured'}`);
+    console.log(`TikTok: ${TIKTOK_POST_URLS.length ? `${TIKTOK_POST_URLS.length} post(s) configured` : 'NOT CONFIGURED - set TIKTOK_POST_URLS in .env'}`);
     });
 }
 

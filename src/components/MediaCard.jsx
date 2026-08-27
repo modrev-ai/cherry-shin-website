@@ -55,7 +55,7 @@ function MediaCard({ item, index }) {
         >
             <div className="media-card-header">
                 <PlatformIcon platform={item.platform} />
-                <span className="media-date">{item.date}</span>
+                {item.date && <span className="media-date">{item.date}</span>}
             </div>
 
             <div className="media-thumbnail">
