@@ -2,6 +2,15 @@ import { useEffect } from 'react'
 import PlatformIcon from './PlatformIcon'
 import { platformLabel } from '../constants/platforms'
 
+// The modal only opens on a deliberate click, so that user gesture is what
+// permits playback to start on its own. Without these parameters the embed
+// loads paused and needs a second click to start.
+function autoplaySrc(embedUrl) {
+    if (!embedUrl) return embedUrl
+    const separator = embedUrl.includes('?') ? '&' : '?'
+    return `${embedUrl}${separator}autoplay=1&playsinline=1&rel=0`
+}
+
 function MediaModal({ item, onClose }) {
     useEffect(() => {
         const handleEsc = (e) => {
@@ -46,7 +55,7 @@ function MediaModal({ item, onClose }) {
                 <div className="media-modal-body">
                     {item.embedUrl ? (
                         <iframe
-                            src={item.embedUrl}
+                            src={autoplaySrc(item.embedUrl)}
                             className="media-modal-iframe"
                             allowFullScreen
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

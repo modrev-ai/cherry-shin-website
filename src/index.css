@@ -1206,10 +1206,21 @@ body {
   outline-offset: 3px;
 }
 
-/* The play glyph over the thumbnail is decoration now, not a link */
+/* Nothing in the card is interactive except the watch button, so nothing else
+   should suggest it is. .media-card set cursor:pointer back when the whole card
+   opened the modal, and the thumbnail, caption and title all inherited it. */
+.reels-grid .media-card,
+.reels-grid .media-card * {
+  cursor: default;
+}
+
 .reels-grid .media-overlay {
   pointer-events: none;
-  cursor: default;
+}
+
+.reels-grid .watch-button,
+.reels-grid .action-btn {
+  cursor: pointer;
 }
 
 /* ===== Feed error state ===== */
