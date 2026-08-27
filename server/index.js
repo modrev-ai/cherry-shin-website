@@ -20,7 +20,16 @@ const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
 // The shipped .env template uses a placeholder value. Treat it as unset so we
 // report "not configured" instead of sending a bogus token to the Graph API.
 const isPlaceholderToken = (t) => !t || /^your_.*_here$/.test(t.trim());
-const IG_USER_ID = process.env.IG_USER_ID || '17841405309284898';
+// No fallback on purpose. This used to default to a hardcoded account id left
+// over from the original code, which meant that setting a token without also
+// setting the id would have quietly fetched a stranger's posts and presented
+// them as Cherry's, rather than failing.
+const IG_USER_ID = process.env.IG_USER_ID;
+
+// Instagram needs both halves: a token alone identifies who is asking, not
+// whose media to read.
+const isInstagramConfigured = () =>
+    !isPlaceholderToken(IG_ACCESS_TOKEN) && !isPlaceholderToken(IG_USER_ID);
 
 // Token cache file
 const TOKEN_CACHE_FILE = join(__dirname, 'token_cache.json');
@@ -231,7 +240,7 @@ async function fetchAudienceStats() {
         }
     }
 
-    if (!isPlaceholderToken(IG_ACCESS_TOKEN)) {
+    if (isInstagramConfigured()) {
         const url = `${IG_API}/${IG_USER_ID}?fields=followers_count,media_count&access_token=${IG_ACCESS_TOKEN}`;
         const response = await fetch(url);
         const data = await response.json();
@@ -281,8 +290,8 @@ app.get('/api/instagram/media', async (req, res) => {
         const token = tokenCache.accessToken;
         const limit = Number(req.query.limit) || 12;
 
-        if (isPlaceholderToken(token)) {
-            return res.status(500).json({ error: 'No Instagram access token configured. Set IG_ACCESS_TOKEN in .env' });
+        if (isPlaceholderToken(token) || isPlaceholderToken(IG_USER_ID)) {
+            return res.status(500).json({ error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
         }
 
         // Keyed by limit so different page sizes do not clobber each other.
@@ -334,8 +343,8 @@ app.get('/api/instagram/media/next', async (req, res) => {
         const { cursor } = req.query;
         const tokenCache = await loadTokenCache();
 
-        if (isPlaceholderToken(tokenCache.accessToken)) {
-            return res.status(500).json({ error: 'No Instagram access token configured. Set IG_ACCESS_TOKEN in .env' });
+        if (isPlaceholderToken(tokenCache.accessToken) || isPlaceholderToken(IG_USER_ID)) {
+            return res.status(500).json({ error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
         }
 
         if (!cursor) {
@@ -402,7 +411,7 @@ const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(__fi
 if (isDirectRun) {
     app.listen(PORT, () => {
         console.log(`API Server running on http://localhost:${PORT}`);
-        console.log(`Instagram token: ${isPlaceholderToken(IG_ACCESS_TOKEN) ? 'NOT CONFIGURED - set IG_ACCESS_TOKEN in .env' : 'Configured'}`);
+        console.log(`Instagram: ${isInstagramConfigured() ? 'Configured' : 'NOT CONFIGURED - set IG_ACCESS_TOKEN and IG_USER_ID in .env'}`);
         console.log(`YouTube API key: ${isPlaceholderToken(YOUTUBE_API_KEY) ? 'NOT CONFIGURED - set YOUTUBE_API_KEY in .env' : 'Configured'}`);
     });
 }
