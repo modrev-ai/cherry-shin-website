@@ -135,6 +135,11 @@ to sample content.
 
 ## Connecting a platform
 
+> Full step-by-step for every platform — including the Meta console URLs, the order permissions
+> must be added in, and where secrets live — is in
+> [docs/platform-credentials.md](docs/platform-credentials.md). The summaries below cover what
+> each platform needs and why.
+
 ### YouTube — done
 
 Google Cloud Console → enable **YouTube Data API v3** → create an API key → restrict it to that
