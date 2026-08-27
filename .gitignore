@@ -33,3 +33,6 @@ linktree_output.html
 
 # Vercel
 .vercel
+
+.vercel
+.env*
