@@ -89,15 +89,6 @@ function MediaCard({ item, index }) {
                         allowFullScreen
                     />
                 )}
-
-                {/* Decorative only. Hidden once a player is on top of it. */}
-                <div className="media-overlay" aria-hidden="true">
-                    <div className="play-button">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M8 5v14l11-7z" />
-                        </svg>
-                    </div>
-                </div>
             </div>
 
             <MediaActions item={item} />

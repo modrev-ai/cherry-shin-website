@@ -582,43 +582,6 @@ body {
   letter-spacing: 2px;
 }
 
-/* ===== Media Overlay ===== */
-.media-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0);
-  transition: background 0.3s ease;
-  z-index: 3;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.media-card:hover .media-overlay {
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.play-button {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #000;
-  opacity: 0;
-  transform: scale(0.8);
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.media-card:hover .play-button {
-  opacity: 1;
-  transform: scale(1);
-}
-
 /* ===== Media Info ===== */
 .media-info {
   padding: 16px;
@@ -1210,10 +1173,6 @@ body {
 .reels-grid .media-card,
 .reels-grid .media-card * {
   cursor: default;
-}
-
-.reels-grid .media-overlay {
-  pointer-events: none;
 }
 
 .reels-grid .watch-button,
