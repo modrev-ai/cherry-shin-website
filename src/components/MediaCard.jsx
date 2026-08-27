@@ -24,6 +24,13 @@ function MediaCard({ item, index }) {
 
     const canPlayInline = Boolean(item.embedUrl)
 
+    // Orientation decides whether the media fills the portrait frame or is
+    // letterboxed inside it. The server reports it for YouTube, where Shorts
+    // and normal uploads are mixed together; the other platforms are known
+    // shapes, so fall back on the platform.
+    const orientation = item.orientation
+        || (item.platform === 'youtube' || item.platform === 'twitter' ? 'landscape' : 'portrait')
+
     // Only the slide actually on screen mounts a player. Unmounting on exit
     // stops playback and keeps a long feed from accumulating live iframes.
     useEffect(() => {
@@ -48,7 +55,7 @@ function MediaCard({ item, index }) {
     return (
         <div
             ref={cardRef}
-            className={`media-card media-card--${item.platform} ${loaded ? 'loaded' : ''} ${error ? 'error' : ''}`}
+            className={`media-card media-card--${item.platform} media-card--${orientation} ${loaded ? 'loaded' : ''} ${error ? 'error' : ''}`}
             style={{ animationDelay: `${delay}ms` }}
         >
             <div className="media-card-header">

@@ -132,6 +132,27 @@ function uploadsPlaylistId(channelId) {
     return channelId.replace(/^UC/, 'UU');
 }
 
+// The API exposes no aspect ratio: player.embedHtml reports 480x270 for every
+// video, and duration is ambiguous since Shorts may run to three minutes.
+// Requesting the /shorts/ URL is definitive - YouTube serves it for a Short and
+// redirects to /watch for anything else. It costs no API quota, and the feed
+// cache means it runs once per refresh rather than per visitor.
+async function isShort(videoId) {
+    try {
+        const response = await fetch(`https://www.youtube.com/shorts/${videoId}`, {
+            method: 'HEAD',
+            redirect: 'manual',
+            signal: AbortSignal.timeout(5000),
+        });
+        return response.status === 200;
+    } catch {
+        // Unknown: fall back to landscape, which is the safe default because a
+        // portrait video letterboxed is untidy, whereas a landscape video
+        // cropped to portrait loses most of the frame.
+        return false;
+    }
+}
+
 async function fetchYouTubeVideos({ limit = 12 } = {}) {
     const playlist = await ytGet('playlistItems', {
         part: 'snippet,contentDetails',
@@ -154,6 +175,10 @@ async function fetchYouTubeVideos({ limit = 12 } = {}) {
         statsById = Object.fromEntries((stats.items || []).map(v => [v.id, v.statistics || {}]));
     }
 
+    const shortFlags = Object.fromEntries(
+        await Promise.all(ids.map(async id => [id, await isShort(id)]))
+    );
+
     const items = (playlist.items || []).map(item => {
         const snippet = item.snippet || {};
         const videoId = item.contentDetails?.videoId;
@@ -171,7 +196,12 @@ async function fetchYouTubeVideos({ limit = 12 } = {}) {
             likes: Number(stat.likeCount) || 0,
             views: Number(stat.viewCount) || 0,
             comments: Number(stat.commentCount) || 0,
-            url: videoId ? `https://www.youtube.com/watch?v=${videoId}` : null,
+            orientation: shortFlags[videoId] ? 'portrait' : 'landscape',
+            url: videoId
+                ? (shortFlags[videoId]
+                    ? `https://www.youtube.com/shorts/${videoId}`
+                    : `https://www.youtube.com/watch?v=${videoId}`)
+                : null,
         };
     }).filter(item => item.id && item.thumbnail);
 
