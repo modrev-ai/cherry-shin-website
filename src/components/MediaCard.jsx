@@ -13,7 +13,6 @@ function MediaCard({ item, index, onClick }) {
         <div
             className={`media-card media-card--${item.platform} ${loaded ? 'loaded' : ''} ${error ? 'error' : ''}`}
             style={{ animationDelay: `${delay}ms` }}
-            onClick={onClick}
         >
             <div className="media-card-header">
                 <PlatformIcon platform={item.platform} />
@@ -31,8 +30,6 @@ function MediaCard({ item, index, onClick }) {
                     alt={item.title}
                     onLoad={() => setLoaded(true)}
                     onError={() => setError(true)}
-                    style={{ display: loaded || error ? 'block' : 'none' }}
-                    loading="lazy"
                 />
                 {error && (
                     <div className="media-fallback">
@@ -54,19 +51,32 @@ function MediaCard({ item, index, onClick }) {
 
             <div className="media-info">
                 <h3 className="media-title">{item.title}</h3>
-                <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="watch-button"
-                    onClick={e => e.stopPropagation()}
-                    aria-label={`Watch "${item.title}" on ${platformLabel(item.platform)}`}
-                >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M8 5v14l11-7z" />
-                    </svg>
-                    Watch on {platformLabel(item.platform)}
-                </a>
+                {item.embedUrl ? (
+                    <button
+                        type="button"
+                        className="watch-button"
+                        onClick={onClick}
+                        aria-label={`Play "${item.title}"`}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M8 5v14l11-7z" />
+                        </svg>
+                        Watch on {platformLabel(item.platform)}
+                    </button>
+                ) : (
+                    <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="watch-button"
+                        aria-label={`Watch "${item.title}" on ${platformLabel(item.platform)}`}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M8 5v14l11-7z" />
+                        </svg>
+                        Watch on {platformLabel(item.platform)}
+                    </a>
+                )}
             </div>
 
         </div>

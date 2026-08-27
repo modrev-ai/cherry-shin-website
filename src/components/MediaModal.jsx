@@ -36,7 +36,7 @@ function MediaModal({ item, onClose }) {
                         rel="noopener noreferrer"
                         className="media-modal-external"
                     >
-                        View on {item.platform}
+                        View on {platformLabel(item.platform)}
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 19H5V5h14v14zm0-16H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5.04 5.08l-4.5 4.5-.78-.78 4.5-4.5.78.78zm-3.46 6.84H7.22v-1.5h3.28v1.5zm5.66-3.34l-4.5 4.5-.78-.78 4.5-4.5.78.78z" />
                         </svg>

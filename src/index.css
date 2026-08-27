@@ -1175,6 +1175,10 @@ body {
 
 /* ===== Watch button: the only element that leaves the site ===== */
 .watch-button {
+  /* rendered as either a button or an anchor depending on embeddability */
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1272,4 +1276,18 @@ body {
 .media-modal-noembed p {
   color: rgba(255, 255, 255, 0.75);
   font-size: 0.95rem;
+}
+
+/* ===== Thumbnail loading =====
+   The image is never hidden behind its own load event. It paints whenever the
+   browser has it, and the skeleton simply sits behind it until then. Gating
+   visibility on onLoad meant any failure to fire that event left the card
+   stuck on a shimmer forever. */
+.media-thumbnail img {
+  position: relative;
+  z-index: 1;
+}
+
+.media-skeleton {
+  z-index: 0;
 }
