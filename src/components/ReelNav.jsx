@@ -1,6 +1,6 @@
 // Fixed controls for moving between slides without a scroll gesture. The snap
 // container settles on the neighbouring slide once scrolled by one viewport.
-function ReelNav() {
+function ReelNav({ showWide, onToggleWide }) {
     const getScroller = () => document.querySelector('.app')
 
     const step = (direction) => {
@@ -36,6 +36,22 @@ function ReelNav() {
             >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </button>
+
+            <button
+                type="button"
+                className={`nav-btn nav-btn--wide ${showWide ? 'is-on' : 'is-off'}`}
+                onClick={onToggleWide}
+                aria-pressed={showWide}
+                aria-label={showWide ? 'Hide wide videos' : 'Show wide videos'}
+                title={showWide ? 'Hide wide videos' : 'Show wide videos'}
+            >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="2" y="6" width="20" height="12" rx="2" stroke="currentColor" strokeWidth="2" />
+                    {!showWide && (
+                        <path d="M4 20L20 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
                 </svg>
             </button>
 

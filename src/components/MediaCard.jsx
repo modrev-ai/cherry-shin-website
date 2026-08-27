@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import PlatformIcon from './PlatformIcon'
-import { platformLabel } from '../constants/platforms'
+import { platformLabel, itemOrientation } from '../constants/platforms'
 import MediaActions from './MediaActions'
 
 // Inline playback starts without a click, so there is no user gesture to
@@ -24,12 +24,7 @@ function MediaCard({ item, index }) {
 
     const canPlayInline = Boolean(item.embedUrl)
 
-    // Orientation decides whether the media fills the portrait frame or is
-    // letterboxed inside it. The server reports it for YouTube, where Shorts
-    // and normal uploads are mixed together; the other platforms are known
-    // shapes, so fall back on the platform.
-    const orientation = item.orientation
-        || (item.platform === 'youtube' || item.platform === 'twitter' ? 'landscape' : 'portrait')
+    const orientation = itemOrientation(item)
 
     // Only the slide actually on screen mounts a player. Unmounting on exit
     // stops playback and keeps a long feed from accumulating live iframes.

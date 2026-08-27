@@ -1304,3 +1304,65 @@ body {
   aspect-ratio: auto;
   transform: none;
 }
+
+/* ===== Wide posts =====
+   A landscape video letterboxed into a portrait frame is a thin strip. Give it
+   its own frame instead, as tall as the window allows and capped by the
+   viewport width, and move the surrounding furniture to match: a wide frame
+   leaves no gutter for the action rail to sit in. */
+.reels-grid .media-card {
+  --reel-height: calc(var(--reel-width) * 16 / 9);
+}
+
+.reels-grid .media-card--landscape {
+  --reel-width: min(100%, calc(100vh * 16 / 9));
+  --reel-width: min(100%, calc(100dvh * 16 / 9));
+  --reel-height: calc(var(--reel-width) * 9 / 16);
+}
+
+.reels-grid .media-card--landscape .media-thumbnail {
+  aspect-ratio: 16 / 9;
+}
+
+/* The frame now matches the video, so the player just fills it */
+.reels-grid .media-card--landscape .media-inline-player {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  transform: none;
+}
+
+.reels-grid .media-card--landscape .media-thumbnail img {
+  object-fit: cover;
+}
+
+/* Header tracks the frame's real height, whichever way round it is. This was
+   hardcoded to the portrait ratio and would have sat off the wide frame. */
+.reels-grid .media-card-header {
+  top: calc(50% - var(--reel-height) / 2 + 20px);
+}
+
+/* Caption and rail follow the frame's edges rather than the slide's */
+.reels-grid .media-card--landscape .media-info {
+  bottom: calc(50% - var(--reel-height) / 2);
+}
+
+.reels-grid .media-card--landscape .media-actions {
+  left: auto;
+  right: calc((100% - var(--reel-width)) / 2 + 16px);
+  bottom: calc(50% - var(--reel-height) / 2 + 88px);
+}
+
+/* ===== Wide-post toggle in the nav ===== */
+.nav-btn--wide.is-off {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.nav-btn--wide.is-on {
+  background: rgba(255, 107, 157, 0.18);
+  border-color: rgba(255, 107, 157, 0.4);
+  color: #fff;
+}

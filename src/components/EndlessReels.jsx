@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
 import { fetchMixedMedia, BackendUnreachableError } from '../services/mediaApi'
+import { itemOrientation } from '../constants/platforms'
 import MediaCard from './MediaCard'
 
-function EndlessReels() {
+function EndlessReels({ showWide = true }) {
     const [mediaItems, setMediaItems] = useState([])
     const [loading, setLoading] = useState(true)
     const [hasMore, setHasMore] = useState(true)
@@ -72,6 +73,12 @@ function EndlessReels() {
 
     const loaderRef = useInfiniteScroll(loadMoreMedia, loading)
 
+    // Filter at render rather than on fetch, so switching wide posts back on
+    // brings them straight back without refetching.
+    const visibleItems = showWide
+        ? mediaItems
+        : mediaItems.filter(item => itemOrientation(item) !== 'landscape')
+
     if (mediaItems.length === 0 && error) {
         return (
             <div className="reels-error">
@@ -101,7 +108,7 @@ function EndlessReels() {
             </div>
 
             <div className="reels-grid">
-                {mediaItems.map((item, index) => (
+                {visibleItems.map((item, index) => (
                     <MediaCard key={`${item.platform}-${item.id}-${item.cycleId}`} item={item} index={index} />
                 ))}
             </div>
@@ -109,6 +116,13 @@ function EndlessReels() {
             {loading && (
                 <div className="reels-loading-more">
                     <div className="loading-spinner"></div>
+                </div>
+            )}
+
+            {!showWide && visibleItems.length === 0 && mediaItems.length > 0 && (
+                <div className="reels-error">
+                    <h3>Nothing to show</h3>
+                    <p>Every post loaded so far is a wide video, and those are hidden.</p>
                 </div>
             )}
 
