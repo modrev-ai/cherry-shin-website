@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes the previous run irrelevant
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # oxlint exits 0 on warnings by default, which would let a regression
+      # through; lint:ci adds --deny-warnings so warnings fail the run.
+      - name: Lint
+        run: npm run lint:ci
+
+      - name: Build
+        run: npm run build
+
+      # The server has no build step, so nothing else would catch a syntax
+      # error in it. Installing also verifies its lockfile is intact.
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
+      - name: Check server syntax
+        run: |
+          for file in server/*.js; do
+            node --check "$file"
+          done
