@@ -43,10 +43,84 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 const YT_API = process.env.YT_API_BASE || 'https://www.googleapis.com/youtube/v3';
 
+const FB_FIELDS = [
+    'id',
+    'message',
+    'created_time',
+    'full_picture',
+    'permalink_url',
+    'attachments{media_type,media,unshimmed_url}',
+    'likes.summary(true).limit(0)',
+    'comments.summary(true).limit(0)',
+    'shares',
+].join(',');
+
+function mapFacebookPost(post) {
+    const attachment = post.attachments?.data?.[0];
+    const image = attachment?.media?.image;
+    const isVideo = attachment?.media_type === 'video';
+    const permalink = post.permalink_url || null;
+
+    // Page posts embed through the plugin endpoints rather than a direct media
+    // URL. Videos and ordinary posts use different ones.
+    const embedUrl = permalink
+        ? `https://www.facebook.com/plugins/${isVideo ? 'video' : 'post'}.php`
+            + `?href=${encodeURIComponent(permalink)}&show_text=false`
+        : null;
+
+    return {
+        id: post.id,
+        platform: 'facebook',
+        title: (post.message || 'Facebook post').split('\n')[0],
+        thumbnail: post.full_picture || null,
+        embedUrl,
+        date: relativeDate(post.created_time),
+        likes: post.likes?.summary?.total_count ?? null,
+        views: null,
+        comments: post.comments?.summary?.total_count ?? null,
+        shares: post.shares?.count ?? null,
+        orientation: image?.width && image?.height && image.width > image.height
+            ? 'landscape'
+            : 'portrait',
+        url: permalink,
+    };
+}
+
+async function fetchFacebookPosts({ limit = 12 } = {}) {
+    const url = `${FB_API}/${FB_PAGE_ID}/posts`
+        + `?fields=${FB_FIELDS}`
+        + `&limit=${limit}`
+        + `&access_token=${FB_PAGE_ACCESS_TOKEN}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.error) {
+        const err = new Error(data.error.message);
+        err.isUpstream = true;
+        throw err;
+    }
+
+    // A post with no image would render as an empty card in a media feed.
+    const items = (data.data || []).map(mapFacebookPost).filter(item => item.thumbnail);
+
+    return { data: items, paging: data.paging || null };
+}
+
 // TikTok's Display API needs OAuth and app review, and only works with the
 // developer's own account until it passes. The public oEmbed endpoint needs
 // neither, but it resolves one post at a time, so the posts to mirror are
 // listed explicitly rather than discovered.
+// Facebook Pages use the same Graph API host as Instagram, but a Page access
+// token rather than a user one. Kept separate so either can be pointed at a
+// stub independently.
+const FB_API = process.env.FB_API_BASE || 'https://graph.facebook.com/v18.0';
+const FB_PAGE_ID = process.env.FB_PAGE_ID;
+const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
+
+const isFacebookConfigured = () =>
+    !isPlaceholderToken(FB_PAGE_ACCESS_TOKEN) && !isPlaceholderToken(FB_PAGE_ID);
+
 const TIKTOK_OEMBED = process.env.TIKTOK_OEMBED_BASE || 'https://www.tiktok.com/oembed';
 const TIKTOK_POST_URLS = (process.env.TIKTOK_POST_URLS || '')
     .split(/[\s,]+/)
@@ -313,6 +387,19 @@ async function fetchAudienceStats() {
         }
     }
 
+    if (isFacebookConfigured()) {
+        const url = `${FB_API}/${FB_PAGE_ID}?fields=followers_count,fan_count&access_token=${FB_PAGE_ACCESS_TOKEN}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!data.error) {
+            platforms.facebook = {
+                followers: Number(data.followers_count ?? data.fan_count) || 0,
+                posts: null,
+                views: null,
+            };
+        }
+    }
+
     const sum = (field) => {
         const values = Object.values(platforms)
             .map(p => p[field])
@@ -446,6 +533,28 @@ app.get('/api/youtube/videos', async (req, res) => {
     }
 });
 
+// Endpoint: get Facebook Page posts
+app.get('/api/facebook/posts', async (req, res) => {
+    try {
+        const limit = Number(req.query.limit) || 12;
+
+        if (!isFacebookConfigured()) {
+            return res.status(500).json({ error: 'Facebook not configured. Set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN in .env' });
+        }
+
+        const result = await cached(
+            `fb:posts:${limit}`,
+            () => fetchFacebookPosts({ limit }),
+            { ttlMs: CACHE_TTL_MS }
+        );
+
+        return sendCached(res, result);
+    } catch (error) {
+        console.error('Error fetching Facebook posts:', error.message);
+        return res.status(502).json({ error: 'Facebook API error', message: error.message });
+    }
+});
+
 // Endpoint: get TikTok posts
 app.get('/api/tiktok/posts', async (req, res) => {
     try {
@@ -496,6 +605,7 @@ if (isDirectRun) {
         console.log(`Instagram: ${isInstagramConfigured() ? 'Configured' : 'NOT CONFIGURED - set IG_ACCESS_TOKEN and IG_USER_ID in .env'}`);
         console.log(`YouTube API key: ${isPlaceholderToken(YOUTUBE_API_KEY) ? 'NOT CONFIGURED - set YOUTUBE_API_KEY in .env' : 'Configured'}`);
     console.log(`TikTok: ${TIKTOK_POST_URLS.length ? `${TIKTOK_POST_URLS.length} post(s) configured` : 'NOT CONFIGURED - set TIKTOK_POST_URLS in .env'}`);
+    console.log(`Facebook: ${isFacebookConfigured() ? 'Configured' : 'NOT CONFIGURED - set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN in .env'}`);
     });
 }
 

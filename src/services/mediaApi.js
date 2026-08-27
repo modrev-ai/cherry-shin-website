@@ -460,17 +460,18 @@ export async function fetchMixedMedia(page = 0) {
     try {
         const perPlatform = ITEMS_PER_PAGE * 2;
 
-        const [instagramItems, youtubeItems, tiktokItems] = await Promise.all([
+        const [instagramItems, youtubeItems, tiktokItems, facebookItems] = await Promise.all([
             fetchLive(`/instagram/media?limit=${perPlatform}`, 'Instagram'),
             fetchLive(`/youtube/videos?limit=${perPlatform}`, 'YouTube'),
             fetchLive(`/tiktok/posts?limit=${perPlatform}`, 'TikTok'),
+            fetchLive(`/facebook/posts?limit=${perPlatform}`, 'Facebook'),
         ]);
 
         // Live data where a platform is connected, mock where it is not, so the
         // feed stays whole while the remaining platforms are still being set up.
         const pool = [
             ...(tiktokItems.length ? tiktokItems : tiktokContent),
-            ...facebookContent,
+            ...(facebookItems.length ? facebookItems : facebookContent),
             ...twitterContent,
             ...(youtubeItems.length ? youtubeItems : youtubeContent),
             ...(instagramItems.length ? instagramItems : instagramContent),

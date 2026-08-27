@@ -13,7 +13,7 @@ A full-screen reel feed that mirrors Cherry Shin's posts from several social pla
 | YouTube | **Live** | already configured |
 | Instagram | Wired, not configured | `IG_ACCESS_TOKEN` + `IG_USER_ID` |
 | TikTok | **Live once post URLs are set** | `TIKTOK_POST_URLS` |
-| Facebook | Sample content | Page token via the same Meta app as Instagram |
+| Facebook | Wired, not configured | `FB_PAGE_ID` + `FB_PAGE_ACCESS_TOKEN` |
 | X | Sample content | paid API tier |
 
 Any platform without credentials falls back to sample content for that platform only. The feed
@@ -123,6 +123,8 @@ to sample content.
 | `IG_ACCESS_TOKEN` | Instagram Graph API token |
 | `IG_USER_ID` | Instagram account id — **required with the token, not optional** |
 | `TIKTOK_POST_URLS` | TikTok post URLs to mirror, comma/space/newline separated |
+| `FB_PAGE_ID` | Facebook Page id |
+| `FB_PAGE_ACCESS_TOKEN` | Facebook **Page** access token, not a user token |
 | `CACHE_TTL_MS` | cache freshness window, default 600000 |
 | `PORT` | API port, default 3001 |
 | `YT_API_BASE`, `IG_API_BASE` | override upstream base URLs, for testing |
@@ -163,11 +165,23 @@ Graph API Explorer → generate a token with `instagram_basic`, `pages_show_list
 Set **both** `IG_ACCESS_TOKEN` and `IG_USER_ID`. Long-lived tokens expire after about 60 days, so
 this needs a refresh path before it can be left alone.
 
-### Facebook — same Meta app
+### Facebook — wired, needs credentials
 
-You must be an admin of the Page. Grant `pages_read_engagement` and `pages_show_list`, then
-generate a **Page** access token, not a user token. Needs a route adding, following the Instagram
-one.
+Built and ready; set `FB_PAGE_ID` and `FB_PAGE_ACCESS_TOKEN` and it goes live. Both are required —
+setting one alone counts as unconfigured, deliberately, so a half-finished setup fails loudly
+rather than querying the wrong thing.
+
+Use the **same Meta app as Instagram**, so do both in one sitting. You must be an admin of the
+Page. Grant `pages_read_engagement` and `pages_show_list`, then generate a **Page** access token,
+not a user token — this is the step people usually get wrong.
+
+Notes on what it returns:
+
+- Posts with no image are filtered out; they would render as an empty card in a media feed.
+- Videos embed through `plugins/video.php` and other posts through `plugins/post.php`. Page posts
+  have no direct media URL to embed.
+- Orientation comes from the attachment's image dimensions.
+- The Page's follower count feeds the hero totals alongside YouTube's.
 
 ### TikTok — built, needs post URLs
 
