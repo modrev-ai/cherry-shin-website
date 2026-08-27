@@ -1,155 +1,242 @@
-# Cherry Shin - Influencer Website
+# cherrystudio.art
 
-A modern, responsive influencer website featuring an **endless reels** content feed that mixes media from multiple social media platforms (Instagram, TikTok, YouTube).
+A full-screen reel feed that mirrors Cherry Shin's posts from several social platforms into one place.
 
-## Features
+**Live:** https://cherrystudio.art · **Hosting:** Vercel (`modrev` team) · **Deploys:** automatically on push to `main`
 
-- **Endless Reels Feed** - Infinite scroll through mixed content from all platforms
-- **Platform Integration** - Instagram, TikTok, and YouTube content in one unified feed
-- **Responsive Design** - Works beautifully on desktop, tablet, and mobile
-- **Dark Theme** - Modern dark UI with glassmorphism effects
-- **Media Modal** - Click any card to view expanded content with YouTube embeds
-- **Real-time Instagram API** - Backend proxy server fetches live Instagram posts
-- **Skeleton Loading** - Smooth loading animations for media cards
+---
 
-## Project Structure
+## Current status
+
+| Platform | State | Needs |
+| --- | --- | --- |
+| YouTube | **Live** | already configured |
+| Instagram | Wired, not configured | `IG_ACCESS_TOKEN` + `IG_USER_ID` |
+| TikTok | Sample content | oEmbed integration (no credentials required) |
+| Facebook | Sample content | Page token via the same Meta app as Instagram |
+| X | Sample content | paid API tier |
+
+Any platform without credentials falls back to sample content for that platform only. The feed
+never breaks because a platform is unconfigured, but sample posts carry invented engagement
+numbers, so treat anything not marked Live above as placeholder.
+
+## How it behaves
+
+One post fills the screen at a time. Scrolling snaps to the next rather than scrolling the page,
+and the video for whichever post is on screen plays automatically. Autoplay is **muted** — a
+browser will not start unmuted playback without a click, which is why Instagram and TikTok behave
+the same way. Sound is available through the player controls, or by opening the post at source.
+
+Posts are interleaved so consecutive slides come from different platforms. Portrait video fills
+the frame; landscape video gets a wider frame sized to the window, and can be hidden entirely with
+the toggle in the right-hand controls. That preference is remembered per browser.
+
+## Architecture
 
 ```
-cherry-shin-website/
-├── public/
-│   ├── favicon.svg
-│   └── icons.svg
-├── src/
-│   ├── assets/
-│   │   └── hero.png               # Hero background image
-│   ├── components/
-│   │   ├── HeroSection.jsx        # Landing header with profile + stats
-│   │   ├── EndlessReels.jsx       # Main endless scroll feed
-│   │   ├── MediaCard.jsx          # Individual media card component
-│   │   ├── MediaModal.jsx         # Modal for expanded media view
-│   │   └── PlatformIcon.jsx       # Platform-specific icons
-│   ├── hooks/
-│   │   ├── useInfiniteScroll.js   # IntersectionObserver scroll trigger
-│   │   └── useMediaFeed.js        # Paginated feed state (items, loadMore)
-│   ├── services/
-│   │   └── mediaApi.js            # API service for fetching mixed media
-│   ├── App.jsx                    # Composes HeroSection + EndlessReels
-│   ├── App.css
-│   ├── main.jsx
-│   └── index.css                  # Global styles, dark theme, skeletons
-├── server/
-│   ├── index.js                   # Express backend for Instagram API proxy
-│   ├── package.json
-│   └── .env.example               # Environment variables template
-├── index.html
-├── package.json
-└── vite.config.js
+Browser ──▶ /api/*  ──▶  Express app  ──▶  cache  ──▶  platform APIs
+   │                     (one implementation, two entry points)
+   └──▶ static build from dist/
 ```
 
-## Setup Instructions
+The same Express app serves both environments, so local and production cannot drift:
 
-### Prerequisites
+- **Locally** `server/index.js` binds a port; Vite proxies `/api` to it.
+- **In production** `api/index.js` imports that app and Vercel invokes it per request.
+  `vercel.json` rewrites every `/api/*` path to it.
 
-- Node.js 18+ installed
-- (Optional) Meta Developer account for Instagram API access
+### Caching is what makes this affordable
 
-### Quick Start (without Instagram API)
+`server/cache.js` decouples visitor count from upstream API calls. Without it every page load
+would hit the platform APIs directly and a few hundred visitors would exhaust a rate limit.
 
-The website works out-of-the-box with mock data for all platforms:
+- **TTL** — a fresh entry is served without touching upstream (default 10 minutes, `CACHE_TTL_MS`).
+- **Coalescing** — a burst arriving on an expired entry produces one upstream call, not one per caller.
+- **Stale-on-error** — an outage or expired token serves the last good copy rather than an error.
+- **Failure backoff** — a broken upstream is not retried on every request, including from a cold start.
+
+Measured: 200 concurrent callers produced a single upstream call.
+
+**Caveat on serverless.** The cache lives in memory, so on Vercel it lasts only for the life of an
+instance. A cold start begins empty and calls upstream again. Still far inside the free quotas at
+current traffic, but weaker than the long-lived local process. A shared cache (Vercel KV) is the
+fix if traffic grows.
+
+### Layout
+
+```
+src/
+  App.jsx                     owns the wide-post toggle, persists it to localStorage
+  components/
+    HeroSection.jsx           first slide; audience stats and the scroll cue
+    EndlessReels.jsx          feed, infinite scroll, error and retry states
+    MediaCard.jsx             one slide: media, inline player, caption, watch button
+    MediaActions.jsx          right-hand rail: views, likes, comments, share, save
+    ReelNav.jsx               fixed controls: previous, next, wide-post toggle, home
+    PlatformIcon.jsx          per-platform badge
+  constants/platforms.js      platform labels and orientation resolution
+  hooks/useInfiniteScroll.js  IntersectionObserver that triggers the next page
+  services/mediaApi.js        fetches each platform, interleaves, falls back to samples
+server/
+  index.js                    Express app and all routes; exports the app
+  cache.js                    TTL cache with coalescing and stale-on-error
+api/index.js                  Vercel entry point; delegates to the Express app
+```
+
+### API routes
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/youtube/videos?limit=` | uploads, with Shorts detected so portrait video is not letterboxed |
+| `GET /api/instagram/media?limit=` | recent media |
+| `GET /api/instagram/media/next?cursor=` | pagination |
+| `GET /api/instagram/status` | token validity |
+| `GET /api/stats` | audience totals aggregated across configured platforms |
+| `GET /api/cache/stats` | hit rate and upstream call counts |
+
+Responses carry `X-Cache: HIT | MISS | STALE` and an `Age` header.
+
+---
+
+## Local development
 
 ```bash
-# Install frontend dependencies
-npm install
+npm install                 # also installs the git hooks
+npm run dev                 # frontend on http://localhost:5173
 
-# Start the development server
-npm run dev
+cd server && npm install
+npm start                   # API on http://localhost:3001
 ```
 
-The site will be available at `http://localhost:5173`.
+The frontend calls a relative `/api`, which Vite proxies to the API port. Nothing needs a hardcoded
+localhost URL, which is what previously broke the deployed build.
 
-### Full Setup (with Instagram API)
+### Environment
 
-To fetch real Instagram posts:
+Copy `server/.env.example` to `server/.env`. Everything is optional; an unset platform falls back
+to sample content.
 
-1. **Set up Meta Developer credentials:**
-   - Go to [Meta for Developers](https://developers.facebook.com/)
-   - Create an app with Instagram Basic Display permissions
-   - Get your `IG_ACCESS_TOKEN` and `IG_USER_ID`
+| Variable | Purpose |
+| --- | --- |
+| `YOUTUBE_API_KEY` | YouTube Data API v3 key |
+| `YOUTUBE_CHANNEL_ID` | channel to mirror |
+| `IG_ACCESS_TOKEN` | Instagram Graph API token |
+| `IG_USER_ID` | Instagram account id — **required with the token, not optional** |
+| `CACHE_TTL_MS` | cache freshness window, default 600000 |
+| `PORT` | API port, default 3001 |
+| `YT_API_BASE`, `IG_API_BASE` | override upstream base URLs, for testing |
 
-2. **Configure the backend server:**
-   ```bash
-   cd server
-   
-   # Copy the environment template
-   cp .env.example .env
-   
-   # Edit .env with your credentials
-   #   IG_ACCESS_TOKEN=your_token_here
-   #   IG_USER_ID=your_user_id_here
-   ```
+`server/.env` is gitignored. In production these live in Vercel's environment variables.
 
-3. **Start the backend server:**
-   ```bash
-   npm install
-   npm start
-   ```
+---
 
-4. **Start the frontend (in a separate terminal):**
-   ```bash
-   npm run dev
-   ```
+## Connecting a platform
 
-## Deployment (Vercel)
+### YouTube — done
 
-The site deploys as a static frontend plus one serverless function.
+Google Cloud Console → enable **YouTube Data API v3** → create an API key → restrict it to that
+API. Channel id comes from YouTube Studio → Settings → Channel → Advanced.
 
-* `api/[...path].js` delegates every `/api/*` request to the same Express app
-  used in local development, so there is a single implementation.
-* `server/index.js` exports that app and only binds a port when run directly,
-  which is what keeps it usable in both places.
-* `vercel.json` builds with Vite to `dist` and leaves `/api/*` to the function.
+Uses `playlistItems.list` (1 quota unit) rather than `search.list` (100), plus one `videos.list`
+for view and like counts. About **288 units a day** against a 10,000 free allowance, independent
+of traffic.
 
-### Connecting the project
+Shorts are detected by requesting `youtube.com/shorts/{id}`: YouTube serves it for a Short and
+redirects for anything else. The API exposes no aspect ratio — `player.embedHtml` reports 480x270
+for every video, and duration is ambiguous because Shorts may run to three minutes.
 
-1. In Vercel, **Add New → Project** and import `modrev-ai/cherry-shin-website`.
-   The settings in `vercel.json` are picked up automatically.
-2. Add the environment variables under **Settings → Environment Variables**:
+### Instagram — wired, needs credentials
 
-   | Variable | Needed for |
-   | --- | --- |
-   | `YOUTUBE_API_KEY` | live YouTube feed |
-   | `YOUTUBE_CHANNEL_ID` | live YouTube feed |
-   | `IG_ACCESS_TOKEN` | live Instagram feed (optional) |
-   | `IG_USER_ID` | live Instagram feed (optional) |
-   | `CACHE_TTL_MS` | optional, defaults to 10 minutes |
+The Instagram Basic Display API was **shut down in December 2024**. This uses the Instagram Graph
+API instead.
 
-   Anything left unset falls back to sample content for that platform; the site
-   still builds and runs.
-3. Deploy. Pushes to `main` deploy automatically once the repo is connected.
+Prerequisites that catch people out:
 
-### A caveat on caching
+1. The account must be **Business or Creator**, not personal.
+2. It must be **linked to a Facebook Page**.
 
-`server/cache.js` keeps its cache in memory, which on serverless lasts only for
-the life of an instance. A cold start begins with an empty cache and calls
-upstream again, so the request-to-upstream ratio is worse than it is locally.
-At this traffic it stays far inside the free YouTube quota, but a shared cache
-(Vercel KV or similar) would be the fix if that changes.
+Then: Meta Developers → create a Business-type app → add the Instagram product → link the Page →
+Graph API Explorer → generate a token with `instagram_basic`, `pages_show_list` and
+`pages_read_engagement` → exchange it for a long-lived token.
 
-## Social Media Links
+Set **both** `IG_ACCESS_TOKEN` and `IG_USER_ID`. Long-lived tokens expire after about 60 days, so
+this needs a refresh path before it can be left alone.
 
-- **Instagram:** [@itscherryshin](https://www.instagram.com/itscherryshin/)
-- **TikTok:** [@itscherryshin](https://www.tiktok.com/@itscherryshin)
-- **YouTube:** [@cherryshin](https://www.youtube.com/@cherryshin)
-- **Linktree:** [linktr.ee/itscherryshin](https://linktr.ee/itscherryshin)
+### Facebook — same Meta app
 
-## Technologies Used
+You must be an admin of the Page. Grant `pages_read_engagement` and `pages_show_list`, then
+generate a **Page** access token, not a user token. Needs a route adding, following the Instagram
+one.
 
-- **Frontend:** React 19, Vite
-- **Backend:** Node.js, Express
-- **Styling:** Custom CSS with CSS Grid & Flexbox
-- **APIs:** Instagram Graph API (live, via the Express proxy). TikTok and YouTube
-  content is currently mock data defined in `src/services/mediaApi.js`.
+### TikTok — oEmbed is the cheap path
 
-## License
+TikTok's Display API needs a full OAuth flow and app review, and only works with the developer's
+own account until it passes. Its **public oEmbed endpoint needs no auth and no review**: give it a
+post URL and it returns thumbnail and embed data. The tradeoff is curating post URLs rather than
+discovering new posts automatically.
+
+### X — needs a paid tier
+
+Reading a user timeline is not available on the free tier. Options are to pay, leave it on sample
+content, or drop it.
+
+> Every path above needs admin access to the account being mirrored. There is no compliant way to
+> mirror someone else's posts without it; scraping would breach all of these platforms' terms.
+
+---
+
+## Deployment
+
+Vercel, `modrev` team, project `cherry-shin-website`. Pushes to `main` deploy automatically.
+
+- Static build from `dist/`, plus one serverless function for `/api/*`.
+- Environment variables live in Vercel → Settings → Environment Variables.
+- Stable fallback URL: `cherry-shin-website.vercel.app`. Per-deployment URLs change each time.
+
+### DNS
+
+Registrar is Namecheap. The apex uses an A record and `www` a CNAME:
+
+| Type | Host | Value |
+| --- | --- | --- |
+| A | `@` | `76.76.21.21` |
+| CNAME | `www` | `cname.vercel-dns.com.` |
+
+**Leave the `google._domainkey` TXT record alone** — it is DKIM for email and unrelated to hosting.
+
+The TLS certificate must cover both the apex and `www`. It was initially issued for the apex only,
+which left `www` serving a mismatched certificate and failing every handshake.
+
+### Plan constraints worth knowing
+
+The Vercel team is on the **Hobby** plan, whose terms prohibit commercial use. The repo is public
+because Hobby does not support Git integration for a private organisation repo — that restriction
+also left several builds stuck in a `BLOCKED` state with no logs. Upgrading to Pro would allow a
+private repo and resolve the commercial-use question; Cloudflare Pages is the free alternative
+without either restriction.
+
+## CI and hooks
+
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`: install, lint, build, then
+install the server's dependencies and syntax-check them.
+
+Lint uses `lint:ci`, which adds `--deny-warnings`. Plain `oxlint` exits 0 on warnings, so wiring
+`npm run lint` into CI would have produced a check that never failed.
+
+`.githooks/pre-push` runs the same lint and build before a push. It is a speed bump, not a gate:
+bypassable with `--no-verify`, and only active where `npm install` has been run. Branch protection
+would be the real gate but needs a paid GitHub plan.
+
+## Known gaps
+
+- **Unused files.** `src/components/MediaModal.jsx` and `src/hooks/useMediaFeed.js` are no longer
+  referenced — the modal was unwired when the watch button became a direct link. `src/App.css` and
+  the `react.svg`, `vite.svg` and `hero.png` assets are also unreferenced.
+- **Sample engagement numbers.** Placeholder posts carry invented view and like counts in the tens
+  of thousands, which sit oddly beside a real channel of a different size.
+- **Instagram token refresh** is not implemented; long-lived tokens expire in ~60 days.
+- **Cache is per-instance** on serverless, so cold starts re-fetch.
+
+## Licence
 
 MIT
