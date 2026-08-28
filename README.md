@@ -38,8 +38,9 @@ the toggle in the right-hand controls. That preference is remembered per browser
 ## Architecture
 
 ```
-Browser ──▶ /api/*  ──▶  Express app  ──▶  cache  ──▶  platform APIs
-   │                     (one implementation, two entry points)
+Browser ──▶ Vercel edge ──▶ /api/* ──▶ Express app ──▶ cache ──▶ platform APIs
+   │            (CDN)                  (one implementation,   (in-memory)
+   │                                    two entry points)
    └──▶ static build from dist/
 ```
 
@@ -58,13 +59,28 @@ would hit the platform APIs directly and a few hundred visitors would exhaust a 
 - **Coalescing** — a burst arriving on an expired entry produces one upstream call, not one per caller.
 - **Stale-on-error** — an outage or expired token serves the last good copy rather than an error.
 - **Failure backoff** — a broken upstream is not retried on every request, including from a cold start.
+- **Fill budget** — at most 40 fills per upstream per 10 minutes, so a caller inventing cache keys
+  cannot spend the day's quota. A refused fill serves a stale copy where there is one.
 
 Measured: 200 concurrent callers produced a single upstream call.
 
-**Caveat on serverless.** The cache lives in memory, so on Vercel it lasts only for the life of an
-instance. A cold start begins empty and calls upstream again. Still far inside the free quotas at
-current traffic, but weaker than the long-lived local process. A shared cache (Vercel KV) is the
-fix if traffic grows.
+### There are two caches, and `X-Cache` describes the wrong one
+
+Responses set `Cache-Control: public, max-age=600`, so **Vercel's edge caches them too**. When the
+edge replays a response it replays the whole response — including the `X-Cache` header the app set
+when it originally filled. A request served entirely from the edge, touching no server and no
+upstream, still reports `X-Cache: MISS`.
+
+That header describes the fill it came from, not the request you just made. Reading it the other
+way cost an afternoon during MRO-285: ten consecutive `MISS` responses and an all-zero
+`/api/cache/stats` look exactly like the in-memory cache having stopped working. The tells are
+`X-Vercel-Cache: HIT` and a climbing `Age`. To see what the app's own cache is doing, defeat the
+edge with a parameter the app ignores (`?cb=<random>`) — new URL to the edge, same key to the app.
+
+**Caveat on serverless.** Our cache lives in memory, so on Vercel it lasts only for the life of an
+instance, and a cold start begins empty. That is real, but the edge in front absorbs most repeat
+traffic, so it matters less than the caveat alone suggests. A shared cache (Vercel KV) is the fix
+if traffic grows.
 
 ### Layout
 
@@ -106,9 +122,22 @@ has nothing more. Every platform is normalised to that one shape.
 first answers whether the token is still valid, the second reports hit rate, coalescing and
 upstream call counts. Neither is called by the frontend, and both are meant to be.
 
-Responses carry `X-Cache: HIT | MISS | STALE` and an `Age` header.
+`limit` is clamped to 1–50 and `after` is validated by charset and length (400 otherwise). Both
+values form part of the cache key, and a key that misses is a real upstream call — unclamped, a
+loop over `?limit=` could exhaust the YouTube daily quota. See
+[docs/feed-and-caching.md](docs/feed-and-caching.md).
+
+Responses carry `X-Cache: HIT | MISS | STALE` and an `Age` header — but read the caching section
+above before trusting `X-Cache` on production.
 
 ---
+
+## Documentation
+
+| Document | Covers |
+| --- | --- |
+| [docs/feed-and-caching.md](docs/feed-and-caching.md) | How a page of the feed is assembled, the two cache layers and why `X-Cache` misleads, the quota guardrails, and which test holds which claim |
+| [docs/platform-credentials.md](docs/platform-credentials.md) | Every platform's setup, what each variable is for, where secrets live and how to rotate them |
 
 ## Local development
 
@@ -279,15 +308,24 @@ without either restriction.
 
 ## CI and hooks
 
-`.github/workflows/ci.yml` runs on pull requests and pushes to `main`: install, lint, build, then
-install the server's dependencies and syntax-check them.
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`: install, lint, build,
+install the server's dependencies, syntax-check them, scan for credentials, then run the tests.
 
 Lint uses `lint:ci`, which adds `--deny-warnings`. Plain `oxlint` exits 0 on warnings, so wiring
 `npm run lint` into CI would have produced a check that never failed.
 
-`.githooks/pre-push` runs the same lint and build before a push. It is a speed bump, not a gate:
-bypassable with `--no-verify`, and only active where `npm install` has been run. Branch protection
-would be the real gate but needs a paid GitHub plan.
+`.githooks/pre-commit` refuses to commit staged content carrying a credential. The repo is public,
+so a secret that lands in a commit is scraped within minutes and cannot be unpublished — rotation
+is the only remedy afterwards. `npm run scan:secrets` runs the same check by hand.
+
+`.githooks/pre-push` runs lint, build and the full test suite before a push.
+
+Both are speed bumps rather than gates: bypassable with `--no-verify`, and only active where
+`npm install` has been run. CI is the backstop. Branch protection would be the real gate but needs
+a paid GitHub plan.
+
+`npm test` runs four suites — the feed walk, the cache, the request parameters and the secret
+scanner — 79 assertions in total.
 
 ## Known gaps
 
@@ -296,7 +334,11 @@ would be the real gate but needs a paid GitHub plan.
 - **Facebook shows no like or comment counts.** Those fields need `pages_read_user_content`, which
   the Page token does not carry; requesting them without it fails the whole request, so the server
   falls back once and remembers.
-- **Cache is per-instance** on serverless, so cold starts re-fetch.
+- **Our cache is per-instance** on serverless, so cold starts re-fetch. Vercel's edge cache in
+  front of it absorbs most repeat traffic; `X-Cache` on a production response describes the fill it
+  came from, not the request being served.
+- **Every card ever scrolled past stays mounted** (MRO-268). Releasing far-offscreen cards needs a
+  browser that composites, to watch scroll position while testing it.
 
 ## Licence
 
