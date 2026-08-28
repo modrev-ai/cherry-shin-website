@@ -588,13 +588,19 @@ async function youtubeStats() {
 }
 
 async function instagramStats() {
-    const url = `${IG_API}/${IG_USER_ID}?fields=followers_count,media_count&access_token=${IG_ACCESS_TOKEN}`;
+    const url = `${IG_API}/${IG_USER_ID}`
+        + `?fields=followers_count,media_count,profile_picture_url`
+        + `&access_token=${IG_ACCESS_TOKEN}`;
     const data = await (await fetch(url, { signal: AbortSignal.timeout(STATS_TIMEOUT_MS) })).json();
     if (data.error) return null;
     return {
         followers: Number(data.followers_count) || 0,
         posts: Number(data.media_count) || 0,
         views: null,
+        // Passed straight through, never stored: these CDN links are
+        // short-lived, so the copy that matters is the one fetched with this
+        // response.
+        avatar: data.profile_picture_url || null,
     };
 }
 
@@ -685,6 +691,11 @@ async function fetchAudienceStats() {
             posts: sum('posts'),
             views: sum('views'),
         },
+        // The account being mirrored is the Instagram one, so its picture is
+        // the one people recognise from the profile the link sits on. Null
+        // when that platform is absent or did not return it, and the hero
+        // falls back to initials.
+        avatar: platforms.instagram?.avatar || null,
         platforms,
         connected: Object.keys(platforms),
     };

@@ -13,6 +13,10 @@ function HeroSection() {
     // are connected. Nothing is rendered until they load, so the hero never
     // shows a figure that isn't backed by a live source.
     const [stats, setStats] = useState(null)
+    // Her actual profile picture, which arrives with the stats. The URL is a
+    // short-lived CDN link, so it is used as it comes and never stored.
+    const [avatar, setAvatar] = useState(null)
+    const [avatarFailed, setAvatarFailed] = useState(false)
 
     useEffect(() => {
         let cancelled = false
@@ -20,7 +24,9 @@ function HeroSection() {
         fetch(`${API_BASE}/stats`)
             .then(res => (res.ok ? res.json() : null))
             .then(data => {
-                if (!cancelled && data?.totals) setStats(data.totals)
+                if (cancelled) return
+                if (data?.totals) setStats(data.totals)
+                if (data?.avatar) setAvatar(data.avatar)
             })
             .catch(err => console.warn('Failed to load audience stats:', err))
 
@@ -47,7 +53,19 @@ function HeroSection() {
         <div className="hero-section">
             <div className="hero-content">
                 <div className="hero-avatar">
-                    <div className="avatar-placeholder">CS</div>
+                    {/* Initials are the fallback, not the default: they stand in
+                        when the platform is not connected, does not return a
+                        picture, or the short-lived CDN link has expired by the
+                        time the browser asks for it. */}
+                    {avatar && !avatarFailed ? (
+                        <img
+                            src={avatar}
+                            alt="Cherry Shin"
+                            onError={() => setAvatarFailed(true)}
+                        />
+                    ) : (
+                        <div className="avatar-placeholder">CS</div>
+                    )}
                 </div>
                 <h1 className="hero-name">Cherry Shin</h1>
                 <p className="hero-bio">
