@@ -16,6 +16,13 @@ function inlineSrc(embedUrl) {
     return `${embedUrl}${separator}autoplay=1&mute=1&playsinline=1&rel=0&controls=1${loop}`
 }
 
+// The hero fills the first screen, so the opening cards sit just below the fold
+// and are the next thing anyone sees. They load eagerly: a lazy image is only
+// fetched once the browser judges it near the viewport, and that judgement needs
+// a rendered, visible page - which is exactly what a preview or a background tab
+// is not. Everything deeper stays lazy, which is where the saving is anyway.
+const EAGER_CARDS = 2;
+
 // A sample stands in for a platform that has no credentials yet. It is labelled
 // as one, and carries no engagement counts or date, so nothing on the card
 // asserts a number or a moment that is not real.
@@ -82,7 +89,7 @@ function MediaCard({ item, index }) {
                 <img
                     src={item.thumbnail}
                     alt={item.title}
-                    loading="lazy"
+                    loading={index < EAGER_CARDS ? 'eager' : 'lazy'}
                     decoding="async"
                     onLoad={() => setLoaded(true)}
                     onError={() => setError(true)}
