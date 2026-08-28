@@ -9,7 +9,11 @@
 // Relative by default so the deployed site talks to its own origin. Set
 // VITE_API_BASE at build time when the backend lives elsewhere. In dev, Vite
 // proxies /api to the backend port (see vite.config.js).
-export const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+//
+// import.meta.env is injected by Vite and is undefined anywhere else, so the
+// optional chaining is what lets a plain `node` process import this file at
+// all - without it the module throws on load and none of it can be tested.
+export const API_BASE = import.meta.env?.VITE_API_BASE || '/api';
 
 const tiktokContent = [
     {

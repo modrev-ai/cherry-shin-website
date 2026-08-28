@@ -48,7 +48,11 @@ jobs:
             node --check "$file"
           done
 
-      # A test nobody runs rots. This one caught an off-by-one in the eviction
-      # it was written for, so it is worth failing the build over.
-      - name: Test server
-        run: npm test --prefix server
+      # A test nobody runs rots - and until the root `test` script existed there
+      # was nowhere for a frontend test to run at all, so the feed walk had none
+      # despite being the most intricate code here. This runs both suites: the
+      # cache test that caught an off-by-one in the eviction it was written for,
+      # and the feed test that pins the timeout bug which served zero cards in
+      # production.
+      - name: Test
+        run: npm test

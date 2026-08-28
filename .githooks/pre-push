@@ -48,10 +48,10 @@ if ! npm run --silent build >/dev/null; then
     exit 1
 fi
 
-echo "pre-push: running server tests..."
-if ! npm test --prefix server --silent; then
+echo "pre-push: running tests..."
+if ! npm test --silent; then
     echo "" >&2
-    echo "pre-push: server tests failed. Push aborted." >&2
+    echo "pre-push: tests failed. Push aborted." >&2
     echo "  Fix the failures above, or bypass with: git push --no-verify" >&2
     exit 1
 fi
