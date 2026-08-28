@@ -16,6 +16,9 @@ function inlineSrc(embedUrl) {
     return `${embedUrl}${separator}autoplay=1&mute=1&playsinline=1&rel=0&controls=1${loop}`
 }
 
+// A sample stands in for a platform that has no credentials yet. It is labelled
+// as one, and carries no engagement counts or date, so nothing on the card
+// asserts a number or a moment that is not real.
 function MediaCard({ item, index }) {
     const [loaded, setLoaded] = useState(false)
     const [error, setError] = useState(false)
@@ -55,7 +58,9 @@ function MediaCard({ item, index }) {
         >
             <div className="media-card-header">
                 <PlatformIcon platform={item.platform} />
-                {item.date && <span className="media-date">{item.date}</span>}
+                {item.isSample
+                    ? <span className="media-sample">Sample</span>
+                    : item.date && <span className="media-date">{item.date}</span>}
             </div>
 
             <div className="media-thumbnail">

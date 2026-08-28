@@ -513,6 +513,21 @@ body {
   backdrop-filter: blur(4px);
 }
 
+/* Marks a placeholder standing in for a platform that is not connected yet.
+   It sits where the date would be, because a sample has no real date either. */
+.media-sample {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 3px 8px;
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+}
+
 .media-thumbnail {
   width: 100%;
   aspect-ratio: 4/5;

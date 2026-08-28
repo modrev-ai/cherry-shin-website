@@ -1,5 +1,10 @@
-// Media API service - fetches mixed content from all social platforms
-// Integrates with backend server for Instagram API, uses mock data for TikTok/YouTube
+// Media API service - fetches mixed content from all social platforms.
+//
+// Sample content below is a placeholder for a platform that has no credentials
+// yet. It deliberately carries no engagement counts and no dates: those were
+// invented figures in the tens of thousands, published on a branded site beside
+// real ones, which overstated the account's reach. A sample says only what it
+// honestly can - a platform, a title, a picture - and the card labels it.
 
 // Relative by default so the deployed site talks to its own origin. Set
 // VITE_API_BASE at build time when the backend lives elsewhere. In dev, Vite
@@ -10,92 +15,64 @@ const tiktokContent = [
     {
         id: 'tt1',
         platform: 'tiktok',
+        isSample: true,
         title: 'Outfit of the Day ✨',
         thumbnail: 'https://picsum.photos/seed/cs1/400/700',
         embedUrl: null,
-        date: '2 days ago',
-        likes: 45200,
-        comments: 814,
-        shares: 271,
-        views: 890000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
     {
         id: 'tt3',
         platform: 'tiktok',
+        isSample: true,
         title: 'GRWM for date night 💕',
         thumbnail: 'https://picsum.photos/seed/cs3/400/700',
         embedUrl: null,
-        date: '5 days ago',
-        likes: 38100,
-        comments: 838,
-        shares: 305,
-        views: 720000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
     {
         id: 'tt5',
         platform: 'tiktok',
+        isSample: true,
         title: 'Korean street style inspo',
         thumbnail: 'https://picsum.photos/seed/cs5/400/700',
         embedUrl: null,
-        date: '1 week ago',
-        likes: 52300,
-        comments: 1360,
-        shares: 523,
-        views: 950000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
     {
         id: 'tt7',
         platform: 'tiktok',
+        isSample: true,
         title: 'Try-on haul from Zara',
         thumbnail: 'https://picsum.photos/seed/cs7/400/700',
         embedUrl: null,
-        date: '1 week ago',
-        likes: 29800,
-        comments: 894,
-        shares: 179,
-        views: 540000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
     {
         id: 'tt9',
         platform: 'tiktok',
+        isSample: true,
         title: 'My morning routine 🌅',
         thumbnail: 'https://picsum.photos/seed/cs9/400/700',
         embedUrl: null,
-        date: '2 weeks ago',
-        likes: 61200,
-        comments: 2081,
-        shares: 490,
-        views: 1100000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
     {
         id: 'tt11',
         platform: 'tiktok',
+        isSample: true,
         title: 'Bag essentials 🔑',
         thumbnail: 'https://picsum.photos/seed/cs11/400/700',
         embedUrl: null,
-        date: '2 weeks ago',
-        likes: 44800,
-        comments: 806,
-        shares: 448,
-        views: 820000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
     {
         id: 'tt13',
         platform: 'tiktok',
+        isSample: true,
         title: 'Lipstick try-on 💄',
         thumbnail: 'https://picsum.photos/seed/cs13/400/700',
         embedUrl: null,
-        date: '3 weeks ago',
-        likes: 37500,
-        comments: 825,
-        shares: 225,
-        views: 680000,
         url: 'https://www.tiktok.com/@itscherryshin'
     },
 ];
@@ -104,66 +81,46 @@ const youtubeContent = [
     {
         id: 'yt2',
         platform: 'youtube',
+        isSample: true,
         title: 'WHAT I WEAR IN A WEEK | VLOG',
         thumbnail: 'https://picsum.photos/seed/cy2/400/225',
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
-        date: '3 days ago',
-        likes: 28400,
-        comments: 738,
-        shares: 227,
-        views: 456000,
         url: 'https://www.youtube.com/@cherryshin'
     },
     {
         id: 'yt4',
         platform: 'youtube',
+        isSample: true,
         title: 'GET READY WITH ME | First Date',
         thumbnail: 'https://picsum.photos/seed/cy4/400/225',
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
-        date: '1 week ago',
-        likes: 31200,
-        comments: 936,
-        shares: 312,
-        views: 523000,
         url: 'https://www.youtube.com/@cherryshin'
     },
     {
         id: 'yt6',
         platform: 'youtube',
+        isSample: true,
         title: 'SEOUL VLOG | Coffee & Shopping',
         thumbnail: 'https://picsum.photos/seed/cy6/400/225',
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
-        date: '2 weeks ago',
-        likes: 42100,
-        comments: 1431,
-        shares: 253,
-        views: 678000,
         url: 'https://www.youtube.com/@cherryshin'
     },
     {
         id: 'yt8',
         platform: 'youtube',
+        isSample: true,
         title: 'MY SKINCARE ROUTINE 2024',
         thumbnail: 'https://picsum.photos/seed/cy8/400/225',
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
-        date: '3 weeks ago',
-        likes: 35600,
-        comments: 641,
-        shares: 285,
-        views: 589000,
         url: 'https://www.youtube.com/@cherryshin'
     },
     {
         id: 'yt10',
         platform: 'youtube',
+        isSample: true,
         title: 'HAUL | Spring Collection 2024',
         thumbnail: 'https://picsum.photos/seed/cy10/400/225',
         embedUrl: 'https://www.youtube.com/embed/S9055cJQs6I',
-        date: '1 month ago',
-        likes: 27300,
-        comments: 601,
-        shares: 273,
-        views: 412000,
         url: 'https://www.youtube.com/@cherryshin'
     },
 ];
@@ -172,79 +129,55 @@ const instagramContent = [
     {
         id: 'ig1',
         platform: 'instagram',
+        isSample: true,
         title: 'Golden hour vibes 🌅',
         thumbnail: 'https://picsum.photos/seed/ci1/400/400',
         embedUrl: null,
-        date: '1 day ago',
-        likes: 89200,
-        comments: 2319,
-        shares: 535,
-        views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
     {
         id: 'ig3',
         platform: 'instagram',
+        isSample: true,
         title: 'New hair who dis?',
         thumbnail: 'https://picsum.photos/seed/ci3/400/400',
         embedUrl: null,
-        date: '4 days ago',
-        likes: 76500,
-        comments: 2295,
-        shares: 612,
-        views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
     {
         id: 'ig5',
         platform: 'instagram',
+        isSample: true,
         title: 'Coffee date ☕',
         thumbnail: 'https://picsum.photos/seed/ci5/400/400',
         embedUrl: null,
-        date: '1 week ago',
-        likes: 92100,
-        comments: 3131,
-        shares: 921,
-        views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
     {
         id: 'ig7',
         platform: 'instagram',
+        isSample: true,
         title: 'Sunset in Myeongdong',
         thumbnail: 'https://picsum.photos/seed/ci7/400/400',
         embedUrl: null,
-        date: '2 weeks ago',
-        likes: 68400,
-        comments: 1231,
-        shares: 410,
-        views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
     {
         id: 'ig9',
         platform: 'instagram',
+        isSample: true,
         title: 'Weekend brunch goals 🥐',
         thumbnail: 'https://picsum.photos/seed/ci9/400/400',
         embedUrl: null,
-        date: '2 weeks ago',
-        likes: 81700,
-        comments: 1797,
-        shares: 654,
-        views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
     {
         id: 'ig11',
         platform: 'instagram',
+        isSample: true,
         title: 'Airport look ✈️',
         thumbnail: 'https://picsum.photos/seed/ci11/400/400',
         embedUrl: null,
-        date: '3 weeks ago',
-        likes: 95300,
-        comments: 2478,
-        shares: 953,
-        views: null,
         url: 'https://www.instagram.com/itscherryshin/'
     },
 ];
@@ -253,53 +186,37 @@ const facebookContent = [
     {
         id: 'fb1',
         platform: 'facebook',
+        isSample: true,
         title: 'Behind the scenes at the Seoul shoot',
         thumbnail: 'https://picsum.photos/seed/csfb1/600/750',
         embedUrl: null,
-        date: '3 days ago',
-        likes: 12400,
-        comments: 372,
-        shares: 74,
-        views: null,
         url: 'https://www.facebook.com/itscherryshin'
     },
     {
         id: 'fb2',
         platform: 'facebook',
+        isSample: true,
         title: 'Thank you all for the support ❤️',
         thumbnail: 'https://picsum.photos/seed/csfb2/600/750',
         embedUrl: null,
-        date: '1 week ago',
-        likes: 28900,
-        comments: 983,
-        shares: 231,
-        views: null,
         url: 'https://www.facebook.com/itscherryshin'
     },
     {
         id: 'fb3',
         platform: 'facebook',
+        isSample: true,
         title: 'Live Q&A recap — skincare edition',
         thumbnail: 'https://picsum.photos/seed/csfb3/600/750',
         embedUrl: null,
-        date: '2 weeks ago',
-        likes: 9600,
-        comments: 173,
-        shares: 96,
-        views: 154000,
         url: 'https://www.facebook.com/itscherryshin'
     },
     {
         id: 'fb4',
         platform: 'facebook',
+        isSample: true,
         title: 'Spring lookbook album',
         thumbnail: 'https://picsum.photos/seed/csfb4/600/750',
         embedUrl: null,
-        date: '3 weeks ago',
-        likes: 15200,
-        comments: 334,
-        shares: 91,
-        views: null,
         url: 'https://www.facebook.com/itscherryshin'
     },
 ];
@@ -308,53 +225,37 @@ const twitterContent = [
     {
         id: 'tw1',
         platform: 'twitter',
+        isSample: true,
         title: 'currently accepting cafe recommendations in Seoul ☕',
         thumbnail: 'https://picsum.photos/seed/cstw1/800/450',
         embedUrl: null,
-        date: '1 day ago',
-        likes: 8300,
-        comments: 216,
-        shares: 66,
-        views: 96000,
         url: 'https://x.com/itscherryshin'
     },
     {
         id: 'tw2',
         platform: 'twitter',
+        isSample: true,
         title: 'new video is live — go watch it before I overthink it',
         thumbnail: 'https://picsum.photos/seed/cstw2/800/450',
         embedUrl: null,
-        date: '4 days ago',
-        likes: 14700,
-        comments: 441,
-        shares: 147,
-        views: 210000,
         url: 'https://x.com/itscherryshin'
     },
     {
         id: 'tw3',
         platform: 'twitter',
+        isSample: true,
         title: 'packing for Tokyo, taking outfit requests',
         thumbnail: 'https://picsum.photos/seed/cstw3/800/450',
         embedUrl: null,
-        date: '1 week ago',
-        likes: 6100,
-        comments: 207,
-        shares: 37,
-        views: 74000,
         url: 'https://x.com/itscherryshin'
     },
     {
         id: 'tw4',
         platform: 'twitter',
+        isSample: true,
         title: 'the lighting did most of the work here honestly',
         thumbnail: 'https://picsum.photos/seed/cstw4/800/450',
         embedUrl: null,
-        date: '2 weeks ago',
-        likes: 19800,
-        comments: 356,
-        shares: 158,
-        views: 265000,
         url: 'https://x.com/itscherryshin'
     },
 ];
@@ -406,6 +307,14 @@ function interleaveByPlatform(items) {
 
 const ITEMS_PER_PAGE = 6;
 
+// A platform contributes its real posts once it is configured, and samples only
+// while it is not. Once it goes live its samples stop being served entirely,
+// including on the days it happens to return nothing.
+function withSamples({ items, configured }, samples) {
+    if (configured) return items;
+    return samples;
+}
+
 // Pulls one platform's feed from the backend. The server normalises every
 // platform into the same item shape, so nothing needs remapping here. An
 // unconfigured or unreachable endpoint yields an empty list and the caller
@@ -422,6 +331,10 @@ export class BackendUnreachableError extends Error {
     }
 }
 
+// Resolves to { items, configured }. The flag matters as much as the items: a
+// platform that has no credentials falls back to samples, whereas one that is
+// configured but whose upstream is failing contributes nothing. Replacing real
+// posts with invented ones during an outage would be the worst of both.
 async function fetchLive(path, label) {
     let response;
     try {
@@ -449,32 +362,39 @@ async function fetchLive(path, label) {
         }
 
         console.warn(`${label} unavailable (${response.status}): ${body.error}`);
-        return [];
+        // The server flags a missing-credentials response explicitly. Anything
+        // else - an upstream 502, say - means the platform is set up and simply
+        // not answering right now.
+        return { items: [], configured: body.configured !== false };
     }
 
     const data = await response.json();
-    return data.data || [];
+    return { items: data.data || [], configured: true };
 }
 
 export async function fetchMixedMedia(page = 0) {
     try {
         const perPlatform = ITEMS_PER_PAGE * 2;
 
-        const [instagramItems, youtubeItems, tiktokItems, facebookItems] = await Promise.all([
+        const [instagram, youtube, tiktok, facebook] = await Promise.all([
             fetchLive(`/instagram/media?limit=${perPlatform}`, 'Instagram'),
             fetchLive(`/youtube/videos?limit=${perPlatform}`, 'YouTube'),
             fetchLive(`/tiktok/posts?limit=${perPlatform}`, 'TikTok'),
             fetchLive(`/facebook/posts?limit=${perPlatform}`, 'Facebook'),
         ]);
 
-        // Live data where a platform is connected, mock where it is not, so the
-        // feed stays whole while the remaining platforms are still being set up.
+        // Live data where a platform is connected, samples only where it has no
+        // credentials at all, so the feed stays whole while the remaining
+        // platforms are still being set up. Note the test is `configured`, not
+        // item count: a connected platform that returns nothing this minute
+        // shows nothing, rather than reverting to invented posts under its own
+        // name. X has no integration at all, so it is always sampled.
         const pool = [
-            ...(tiktokItems.length ? tiktokItems : tiktokContent),
-            ...(facebookItems.length ? facebookItems : facebookContent),
+            ...withSamples(tiktok, tiktokContent),
+            ...withSamples(facebook, facebookContent),
             ...twitterContent,
-            ...(youtubeItems.length ? youtubeItems : youtubeContent),
-            ...(instagramItems.length ? instagramItems : instagramContent),
+            ...withSamples(youtube, youtubeContent),
+            ...withSamples(instagram, instagramContent),
         ];
 
         // Simulate slight delay for smooth UX

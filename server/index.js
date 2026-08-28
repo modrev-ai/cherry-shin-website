@@ -19,6 +19,12 @@ const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
 
 // The shipped .env template uses a placeholder value. Treat it as unset so we
 // report "not configured" instead of sending a bogus token to the Graph API.
+//
+// Every "not configured" response carries `configured: false`. That is a
+// contract the client depends on: it falls back to sample content only for a
+// platform that has no credentials at all. A platform that is configured but
+// whose upstream is failing answers 502 without the flag, and contributes
+// nothing rather than being papered over with invented posts.
 const isPlaceholderToken = (t) => !t || /^your_.*_here$/.test(t.trim());
 // No fallback on purpose. This used to default to a hardcoded account id left
 // over from the original code, which meant that setting a token without also
@@ -636,7 +642,7 @@ app.get('/api/instagram/media', async (req, res) => {
         const limit = Number(req.query.limit) || 12;
 
         if (isPlaceholderToken(token) || isPlaceholderToken(IG_USER_ID)) {
-            return res.status(500).json({ error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
+            return res.status(500).json({ configured: false, error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
         }
 
         // Keyed by limit so different page sizes do not clobber each other.
@@ -689,7 +695,7 @@ app.get('/api/instagram/media/next', async (req, res) => {
         const tokenCache = await loadTokenCache();
 
         if (isPlaceholderToken(tokenCache.accessToken) || isPlaceholderToken(IG_USER_ID)) {
-            return res.status(500).json({ error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
+            return res.status(500).json({ configured: false, error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
         }
 
         if (!cursor) {
@@ -715,7 +721,7 @@ app.get('/api/youtube/videos', async (req, res) => {
         const limit = Number(req.query.limit) || 12;
 
         if (isPlaceholderToken(YOUTUBE_API_KEY) || isPlaceholderToken(YOUTUBE_CHANNEL_ID)) {
-            return res.status(500).json({ error: 'YouTube not configured. Set YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID in .env' });
+            return res.status(500).json({ configured: false, error: 'YouTube not configured. Set YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID in .env' });
         }
 
         const result = await cached(
@@ -737,7 +743,7 @@ app.get('/api/facebook/posts', async (req, res) => {
         const limit = Number(req.query.limit) || 12;
 
         if (!isFacebookConfigured()) {
-            return res.status(500).json({ error: 'Facebook not configured. Set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN in .env' });
+            return res.status(500).json({ configured: false, error: 'Facebook not configured. Set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN in .env' });
         }
 
         const result = await cached(
@@ -765,6 +771,7 @@ app.get('/api/tiktok/posts', async (req, res) => {
 
         if (!useApi && TIKTOK_POST_URLS.length === 0) {
             return res.status(500).json({
+                configured: false,
                 error: 'TikTok not configured. Set TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET and '
                     + 'TIKTOK_REFRESH_TOKEN for the Display API, or TIKTOK_POST_URLS for oEmbed.',
             });

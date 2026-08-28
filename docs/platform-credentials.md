@@ -25,9 +25,13 @@ Nothing here contains a secret. Real values live in three places only:
 | TikTok | Needs post URLs | `TIKTOK_POST_URLS` |
 | X | Not connected | needs a paid API tier |
 
-A platform with no credentials falls back to sample content for that platform alone. The feed never
-breaks because something is unset — but sample posts carry invented engagement numbers, so anything
-not marked Live above is placeholder.
+A platform with no credentials falls back to sample content for that platform alone, so the feed
+never breaks because something is unset. A sample is labelled `Sample` on the card and shows no
+engagement counts and no date, so nothing on a placeholder asserts a figure that is not real.
+
+Fallback is keyed on the `configured: false` flag the API returns, not on an empty result. Once a
+platform has credentials its samples stop being served entirely, including on a day its upstream
+returns nothing.
 
 ---
 

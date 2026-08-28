@@ -16,9 +16,13 @@ A full-screen reel feed that mirrors Cherry Shin's posts from several social pla
 | Facebook | Wired, not configured | `FB_PAGE_ID` + `FB_PAGE_ACCESS_TOKEN` |
 | X | Sample content | paid API tier |
 
-Any platform without credentials falls back to sample content for that platform only. The feed
-never breaks because a platform is unconfigured, but sample posts carry invented engagement
-numbers, so treat anything not marked Live above as placeholder.
+Any platform without credentials falls back to sample content for that platform only, so the feed
+never breaks because a platform is unconfigured. A sample is labelled `Sample` on the card and
+carries no engagement counts and no date - it asserts only a platform, a title and a picture.
+
+The test is whether a platform is *configured*, not whether it returned anything. A connected
+platform that answers with nothing this minute shows nothing, rather than reverting to invented
+posts published under its own name.
 
 ## How it behaves
 
@@ -268,9 +272,9 @@ would be the real gate but needs a paid GitHub plan.
 
 ## Known gaps
 
-- **Sample engagement numbers.** Placeholder posts carry invented view and like counts in the tens
-  of thousands, which sit oddly beside a real channel of a different size.
-- **Instagram token refresh** is not implemented; long-lived tokens expire in ~60 days.
+- **Facebook shows no like or comment counts.** Those fields need `pages_read_user_content`, which
+  the Page token does not carry; requesting them without it fails the whole request, so the server
+  falls back once and remembers.
 - **Cache is per-instance** on serverless, so cold starts re-fetch.
 
 ## Licence
