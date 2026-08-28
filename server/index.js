@@ -402,9 +402,9 @@ function relativeDate(iso) {
     return `${Math.floor(days / 365)} year${days < 730 ? '' : 's'} ago`;
 }
 
-async function ytGet(path, params) {
+async function ytGet(path, params, { signal } = {}) {
     const url = `${YT_API}/${path}?` + new URLSearchParams({ ...params, key: YOUTUBE_API_KEY });
-    const response = await fetch(url);
+    const response = await fetch(url, signal ? { signal } : undefined);
     const data = await response.json();
     if (data.error) {
         const err = new Error(data.error.message);
@@ -550,70 +550,113 @@ async function fetchTikTokPosts({ limit = 12 } = {}) {
 // Aggregate audience stats across whatever platforms are configured. Each
 // platform contributes only if its credentials are present, so this fills out
 // as more are connected rather than needing a rewrite each time.
+//
+// Every platform is also collected in isolation. One unreachable API used to
+// propagate out of here and answer 502 for the endpoint as a whole, so the
+// hero dropped every number it had - including the ones that arrived perfectly
+// well - and showed nothing at all. A partial answer is a real answer.
+const STATS_TIMEOUT_MS = 8000;
+
+async function youtubeStats() {
+    const data = await ytGet(
+        'channels',
+        { part: 'statistics', id: YOUTUBE_CHANNEL_ID },
+        { signal: AbortSignal.timeout(STATS_TIMEOUT_MS) },
+    );
+    const stat = data.items?.[0]?.statistics;
+    if (!stat) return null;
+    return {
+        // YouTube hides exact counts for some channels; treat that as unknown
+        // rather than reporting zero followers.
+        followers: stat.hiddenSubscriberCount ? null : Number(stat.subscriberCount) || 0,
+        posts: Number(stat.videoCount) || 0,
+        views: Number(stat.viewCount) || 0,
+    };
+}
+
+async function instagramStats() {
+    const url = `${IG_API}/${IG_USER_ID}?fields=followers_count,media_count&access_token=${IG_ACCESS_TOKEN}`;
+    const data = await (await fetch(url, { signal: AbortSignal.timeout(STATS_TIMEOUT_MS) })).json();
+    if (data.error) return null;
+    return {
+        followers: Number(data.followers_count) || 0,
+        posts: Number(data.media_count) || 0,
+        views: null,
+    };
+}
+
+async function facebookStats() {
+    const url = `${FB_API}/${FB_PAGE_ID}?fields=followers_count,fan_count&access_token=${FB_PAGE_ACCESS_TOKEN}`;
+    const data = await (await fetch(url, { signal: AbortSignal.timeout(STATS_TIMEOUT_MS) })).json();
+    if (data.error) return null;
+    return {
+        followers: Number(data.followers_count ?? data.fan_count) || 0,
+        posts: null,
+        views: null,
+    };
+}
+
+async function tiktokStats() {
+    const token = await tiktokAccessToken();
+    const response = await fetch(
+        `${TIKTOK_API}/user/info/?fields=follower_count,video_count,likes_count`,
+        { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(STATS_TIMEOUT_MS) },
+    );
+    const user = (await response.json()).data?.user;
+    if (!user) return null;
+    return {
+        followers: Number(user.follower_count) || 0,
+        posts: Number(user.video_count) || 0,
+        views: null,
+    };
+}
+
+// Returns null when the platform is not set up, so it is never counted as an
+// attempt; `failed` marks one that was asked and could not answer, which is
+// what separates a partial outage from a total one.
+async function collectStats(name, configured, load) {
+    if (!configured) return null;
+    try {
+        return { name, stats: await load() };
+    } catch (error) {
+        console.warn(`${name} stats unavailable:`, error.message);
+        return { name, failed: true };
+    }
+}
+
 async function fetchAudienceStats() {
+    const collected = await Promise.all([
+        collectStats(
+            'youtube',
+            !isPlaceholderToken(YOUTUBE_API_KEY) && !isPlaceholderToken(YOUTUBE_CHANNEL_ID),
+            youtubeStats,
+        ),
+        collectStats('instagram', isInstagramConfigured(), instagramStats),
+        collectStats('facebook', isFacebookConfigured(), facebookStats),
+        collectStats('tiktok', isTikTokApiConfigured(), tiktokStats),
+    ]);
+
     const platforms = {};
+    let asked = 0;
+    let failed = 0;
 
-    if (!isPlaceholderToken(YOUTUBE_API_KEY) && !isPlaceholderToken(YOUTUBE_CHANNEL_ID)) {
-        const data = await ytGet('channels', {
-            part: 'statistics',
-            id: YOUTUBE_CHANNEL_ID,
-        });
-        const stat = data.items?.[0]?.statistics;
-        if (stat) {
-            platforms.youtube = {
-                // YouTube hides exact counts for some channels; treat that as unknown
-                // rather than reporting zero followers.
-                followers: stat.hiddenSubscriberCount ? null : Number(stat.subscriberCount) || 0,
-                posts: Number(stat.videoCount) || 0,
-                views: Number(stat.viewCount) || 0,
-            };
+    for (const result of collected) {
+        if (!result) continue;
+        asked += 1;
+        if (result.failed) {
+            failed += 1;
+        } else if (result.stats) {
+            platforms[result.name] = result.stats;
         }
     }
 
-    if (isInstagramConfigured()) {
-        const url = `${IG_API}/${IG_USER_ID}?fields=followers_count,media_count&access_token=${IG_ACCESS_TOKEN}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        if (!data.error) {
-            platforms.instagram = {
-                followers: Number(data.followers_count) || 0,
-                posts: Number(data.media_count) || 0,
-                views: null,
-            };
-        }
-    }
-
-    if (isFacebookConfigured()) {
-        const url = `${FB_API}/${FB_PAGE_ID}?fields=followers_count,fan_count&access_token=${FB_PAGE_ACCESS_TOKEN}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        if (!data.error) {
-            platforms.facebook = {
-                followers: Number(data.followers_count ?? data.fan_count) || 0,
-                posts: null,
-                views: null,
-            };
-        }
-    }
-
-    if (isTikTokApiConfigured()) {
-        try {
-            const token = await tiktokAccessToken();
-            const r = await fetch(`${TIKTOK_API}/user/info/?fields=follower_count,video_count,likes_count`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            const d = await r.json();
-            const u = d.data?.user;
-            if (u) {
-                platforms.tiktok = {
-                    followers: Number(u.follower_count) || 0,
-                    posts: Number(u.video_count) || 0,
-                    views: null,
-                };
-            }
-        } catch (err) {
-            console.warn('TikTok stats unavailable:', err.message);
-        }
+    // Only a total blackout is an error worth a 502. A platform that answered
+    // without usable numbers is not a failure, just a platform with nothing to
+    // report, and it leaves the others untouched.
+    if (asked > 0 && failed === asked) {
+        const error = new Error('Every configured platform failed to report stats');
+        error.isUpstream = true;
+        throw error;
     }
 
     const sum = (field) => {
