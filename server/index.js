@@ -4,7 +4,8 @@ import dotenv from 'dotenv';
 import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
-import { cached, getStats } from './cache.js';
+import { cached, getStats, BudgetExceededError } from './cache.js';
+import { readLimit, readAfter } from './params.js';
 
 dotenv.config();
 
@@ -702,6 +703,18 @@ async function fetchAudienceStats() {
 }
 
 // Tell the caller (and any CDN in front) how the response was served.
+// Our own throttle, not the platform's. 503 with Retry-After says "ask again
+// later" rather than blaming an upstream that is perfectly healthy, and the
+// feed already treats a configured-but-unavailable platform correctly: it
+// contributes nothing to this batch and is retried on the next one.
+function sendBudgetSpent(res, label) {
+    res.set('Retry-After', String(Math.floor(CACHE_TTL_MS / 1000)));
+    return res.status(503).json({
+        configured: true,
+        error: `${label} is throttled to protect its API quota; try again shortly`,
+    });
+}
+
 function sendCached(res, result) {
     const label = { store: 'HIT', upstream: 'MISS', stale: 'STALE' };
     res.set('X-Cache', label[result.source] || 'MISS');
@@ -718,8 +731,10 @@ app.get('/api/instagram/media', async (req, res) => {
     try {
         const tokenCache = await loadTokenCache();
         const token = tokenCache.accessToken;
-        const limit = Number(req.query.limit) || 12;
-        const after = req.query.after || null;
+        const limit = readLimit(req.query.limit);
+        const cursor = readAfter(req.query.after);
+        if (!cursor.ok) return res.status(400).json({ error: 'Invalid cursor' });
+        const after = cursor.value;
 
         if (isPlaceholderToken(token) || isPlaceholderToken(IG_USER_ID)) {
             return res.status(500).json({ configured: false, error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
@@ -730,11 +745,12 @@ app.get('/api/instagram/media', async (req, res) => {
         const result = await cached(
             `ig:media:${limit}:${after || 'first'}`,
             () => fetchInstagramMedia(token, { limit, after }),
-            { ttlMs: CACHE_TTL_MS }
+            { ttlMs: CACHE_TTL_MS, budget: 'instagram' }
         );
 
         return sendCached(res, result);
     } catch (error) {
+        if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'Instagram');
         console.error('Error fetching Instagram media:', error.message);
         return res.status(502).json({
             error: 'Instagram API error',
@@ -772,8 +788,10 @@ app.get('/api/instagram/status', async (req, res) => {
 // Endpoint: get YouTube uploads
 app.get('/api/youtube/videos', async (req, res) => {
     try {
-        const limit = Number(req.query.limit) || 12;
-        const after = req.query.after || null;
+        const limit = readLimit(req.query.limit);
+        const cursor = readAfter(req.query.after);
+        if (!cursor.ok) return res.status(400).json({ error: 'Invalid cursor' });
+        const after = cursor.value;
 
         if (isPlaceholderToken(YOUTUBE_API_KEY) || isPlaceholderToken(YOUTUBE_CHANNEL_ID)) {
             return res.status(500).json({ configured: false, error: 'YouTube not configured. Set YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID in .env' });
@@ -782,11 +800,12 @@ app.get('/api/youtube/videos', async (req, res) => {
         const result = await cached(
             `yt:videos:${limit}:${after || 'first'}`,
             () => fetchYouTubeVideos({ limit, after }),
-            { ttlMs: CACHE_TTL_MS }
+            { ttlMs: CACHE_TTL_MS, budget: 'youtube' }
         );
 
         return sendCached(res, result);
     } catch (error) {
+        if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'YouTube');
         console.error('Error fetching YouTube videos:', error.message);
         return res.status(502).json({ error: 'YouTube API error', message: error.message });
     }
@@ -795,8 +814,10 @@ app.get('/api/youtube/videos', async (req, res) => {
 // Endpoint: get Facebook Page posts
 app.get('/api/facebook/posts', async (req, res) => {
     try {
-        const limit = Number(req.query.limit) || 12;
-        const after = req.query.after || null;
+        const limit = readLimit(req.query.limit);
+        const cursor = readAfter(req.query.after);
+        if (!cursor.ok) return res.status(400).json({ error: 'Invalid cursor' });
+        const after = cursor.value;
 
         if (!isFacebookConfigured()) {
             return res.status(500).json({ configured: false, error: 'Facebook not configured. Set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN in .env' });
@@ -805,11 +826,12 @@ app.get('/api/facebook/posts', async (req, res) => {
         const result = await cached(
             `fb:posts:${limit}:${after || 'first'}`,
             () => fetchFacebookPosts({ limit, after }),
-            { ttlMs: CACHE_TTL_MS }
+            { ttlMs: CACHE_TTL_MS, budget: 'facebook' }
         );
 
         return sendCached(res, result);
     } catch (error) {
+        if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'Facebook');
         console.error('Error fetching Facebook posts:', error.message);
         return res.status(502).json({ error: 'Facebook API error', message: error.message });
     }
@@ -818,7 +840,7 @@ app.get('/api/facebook/posts', async (req, res) => {
 // Endpoint: get TikTok posts
 app.get('/api/tiktok/posts', async (req, res) => {
     try {
-        const limit = Number(req.query.limit) || 12;
+        const limit = readLimit(req.query.limit);
 
         // The Display API lists the account's videos and carries engagement
         // counts, so it wins when configured. oEmbed needs no credentials but
@@ -836,12 +858,13 @@ app.get('/api/tiktok/posts', async (req, res) => {
         const result = await cached(
             useApi ? `tiktok:api:${limit}` : `tiktok:oembed:${limit}`,
             () => (useApi ? fetchTikTokVideos({ limit }) : fetchTikTokPosts({ limit })),
-            { ttlMs: CACHE_TTL_MS }
+            { ttlMs: CACHE_TTL_MS, budget: 'tiktok' }
         );
 
         res.set('X-TikTok-Source', useApi ? 'display-api' : 'oembed');
         return sendCached(res, result);
     } catch (error) {
+        if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'TikTok');
         console.error('Error fetching TikTok posts:', error.message);
         return res.status(502).json({ error: 'TikTok error', message: error.message });
     }

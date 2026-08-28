@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test": "node test/cache.test.mjs"
+    "test": "node test/cache.test.mjs && node test/params.test.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

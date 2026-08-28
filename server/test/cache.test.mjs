@@ -87,6 +87,47 @@ await cached('h1', async () => ({ v: 9 }), { ttlMs: 60000, maxStaleMs: 60000 });
 check('hit path leaves the store untouched', getStats().entries.length === before,
     `${before} -> ${getStats().entries.length}`);
 
+// 10. The upstream budget caps fills per window. Clamping `limit` removes the
+// cheap way to mint keys; this bounds what varying a cursor can still cost.
+clear();
+let budgetCalls = 0;
+let refused = 0;
+for (let i = 0; i < 45; i++) {
+    try {
+        await cached(`bud:${i}`, async () => { budgetCalls++; return { i }; },
+            { ttlMs: 60000, maxStaleMs: 60000, budget: 'yt' });
+    } catch (err) {
+        if (err.name === 'BudgetExceededError') refused++;
+    }
+}
+check('budget caps upstream fills at 40', budgetCalls === 40, `called ${budgetCalls}x`);
+check('fills past the budget are refused', refused === 5, `refused ${refused}`);
+
+// 11. A refused fill serves a stale copy where one exists. Slightly old content
+// beats failing a platform whose only problem is our own throttle.
+clear();
+let staleN = 0;
+await cached('s1', async () => ({ n: ++staleN }), { ttlMs: 20, maxStaleMs: 60000, budget: 'ig' });
+await sleep(40);
+for (let i = 0; i < 39; i++) {
+    await cached(`pad:${i}`, async () => ({ i }), { ttlMs: 60000, maxStaleMs: 60000, budget: 'ig' });
+}
+const refusedResult = await cached('s1', async () => ({ n: ++staleN }),
+    { ttlMs: 20, maxStaleMs: 60000, budget: 'ig' });
+check('a refused fill serves stale rather than failing',
+    refusedResult.source === 'stale' && refusedResult.value.n === 1,
+    `source ${refusedResult.source}, n ${refusedResult.value.n}`);
+
+// 12. Only a fill spends budget. A served hit must not, or a popular page would
+// throttle itself.
+clear();
+let hitCalls = 0;
+for (let i = 0; i < 50; i++) {
+    await cached('same', async () => { hitCalls++; return { i }; },
+        { ttlMs: 60000, maxStaleMs: 60000, budget: 'fb' });
+}
+check('cache hits do not spend budget', hitCalls === 1, `producer ran ${hitCalls}x`);
+
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');
 
 process.exit(fail.length ? 1 : 0);

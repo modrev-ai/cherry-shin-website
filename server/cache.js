@@ -31,6 +31,42 @@ const inFlight = new Map();
 // start against a bad token does not send one upstream call per visitor.
 const failures = new Map();
 
+// Clamping `limit` collapses the cheap way to mint cache keys, but a caller can
+// still vary `after`, so the number of fills per upstream is capped per window
+// too. This bounds abuse; it is not a quota guarantee. Cache state lives in the
+// process, and a serverless platform runs several, so the real ceiling is this
+// number times however many instances are warm.
+//
+// 40 per ten minutes sits above what legitimate traffic needs. A cold cache
+// plus one reader scrolling to the end of a platform's catalogue is roughly
+// twenty fills, and once walked those entries serve everyone else for the rest
+// of the TTL.
+const BUDGET_WINDOW_MS = 10 * 60 * 1000;
+const BUDGET_MAX_FILLS = 40;
+const budgets = new Map();
+
+export class BudgetExceededError extends Error {
+    constructor(name) {
+        super(`Upstream budget spent for ${name}`);
+        this.name = 'BudgetExceededError';
+        this.budget = name;
+    }
+}
+
+// Returns false when this window's fills are already spent. Only called on the
+// path that is about to hit upstream, so a cache hit or a coalesced wait costs
+// nothing against it.
+function claimFill(name, now) {
+    const current = budgets.get(name);
+    if (!current || now - current.windowStart >= BUDGET_WINDOW_MS) {
+        budgets.set(name, { windowStart: now, fills: 1 });
+        return true;
+    }
+    if (current.fills >= BUDGET_MAX_FILLS) return false;
+    current.fills++;
+    return true;
+}
+
 const stats = {
     hits: 0,
     misses: 0,
@@ -39,6 +75,7 @@ const stats = {
     upstreamErrors: 0,
     staleServes: 0,
     suppressedRetries: 0,
+    budgetRefusals: 0,
 };
 
 // Nothing removed entries before this: they were overwritten or read, never
@@ -99,6 +136,7 @@ export async function cached(key, producer, options = {}) {
         ttlMs = DEFAULT_TTL_MS,
         maxStaleMs = DEFAULT_MAX_STALE_MS,
         errorBackoffMs = DEFAULT_ERROR_BACKOFF_MS,
+        budget = null,
     } = options;
 
     const entry = store.get(key);
@@ -124,6 +162,18 @@ export async function cached(key, producer, options = {}) {
 
     stats.misses++;
     sweep(Date.now());
+
+    // Serving a stale copy beats spending a fill we do not have, and beats
+    // failing a platform that has perfectly good slightly-old content.
+    if (budget && !claimFill(budget, Date.now())) {
+        stats.budgetRefusals++;
+        const stale = store.get(key);
+        if (stale && Date.now() - stale.storedAt <= maxStaleMs) {
+            stats.staleServes++;
+            return describe(stale, ttlMs, 'stale');
+        }
+        throw new BudgetExceededError(budget);
+    }
 
     const refresh = (async () => {
         try {
@@ -173,5 +223,6 @@ export function getStats() {
 export function clear() {
     store.clear();
     inFlight.clear();
+    budgets.clear();
     failures.clear();
 }
