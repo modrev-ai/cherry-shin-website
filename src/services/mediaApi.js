@@ -260,15 +260,6 @@ const twitterContent = [
     },
 ];
 
-// Combine all content into a single pool
-const allContent = [
-    ...tiktokContent,
-    ...youtubeContent,
-    ...instagramContent,
-    ...facebookContent,
-    ...twitterContent,
-];
-
 // Small deterministic PRNG. Pagination slices a window out of an ordering, so
 // that ordering has to stay put across the pages being sliced from it - with
 // Math.random every page reshuffled and the offsets pointed into unrelated
@@ -530,17 +521,4 @@ export async function fetchMixedMedia(page = 0) {
         console.error('fetchMixedMedia error:', error);
         return [];
     }
-}
-
-export async function fetchMediaByPlatform(platform, page = 0) {
-    await new Promise(resolve => setTimeout(resolve, 600));
-
-    const filtered = allContent.filter(item => item.platform === platform);
-    const start = (page % Math.ceil(filtered.length / ITEMS_PER_PAGE)) * ITEMS_PER_PAGE;
-
-    return filtered.slice(start, start + ITEMS_PER_PAGE);
-}
-
-export function getAllMedia() {
-    return shuffleArray(allContent);
 }

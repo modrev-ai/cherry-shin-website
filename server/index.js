@@ -758,33 +758,6 @@ app.get('/api/instagram/status', async (req, res) => {
     }
 });
 
-// Endpoint: get next page of results
-app.get('/api/instagram/media/next', async (req, res) => {
-    try {
-        const { cursor } = req.query;
-        const tokenCache = await loadTokenCache();
-
-        if (isPlaceholderToken(tokenCache.accessToken) || isPlaceholderToken(IG_USER_ID)) {
-            return res.status(500).json({ configured: false, error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
-        }
-
-        if (!cursor) {
-            return res.status(400).json({ error: 'Cursor required' });
-        }
-
-        const result = await cached(
-            `ig:media:next:${cursor}`,
-            () => fetchInstagramMedia(tokenCache.accessToken, { limit: 12, after: cursor }),
-            { ttlMs: CACHE_TTL_MS }
-        );
-
-        return sendCached(res, result);
-    } catch (error) {
-        console.error('Error fetching next page:', error.message);
-        return res.status(502).json({ error: error.message });
-    }
-});
-
 // Endpoint: get YouTube uploads
 app.get('/api/youtube/videos', async (req, res) => {
     try {

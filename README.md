@@ -100,8 +100,11 @@ api/index.js                  Vercel entry point; delegates to the Express app
 | `GET /api/cache/stats` | hit rate and upstream call counts |
 
 `after` is the cursor from the previous response's `paging.next`; its absence means the platform
-has nothing more. Every platform is normalised to that one shape. `GET /api/instagram/media/next`
-still exists but is superseded by `/api/instagram/media?after=` and nothing calls it.
+has nothing more. Every platform is normalised to that one shape.
+
+`instagram/status` and `cache/stats` are operator diagnostics rather than feed endpoints — the
+first answers whether the token is still valid, the second reports hit rate, coalescing and
+upstream call counts. Neither is called by the frontend, and both are meant to be.
 
 Responses carry `X-Cache: HIT | MISS | STALE` and an `Age` header.
 
