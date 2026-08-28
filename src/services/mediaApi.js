@@ -325,6 +325,9 @@ const ITEMS_PER_PAGE = 6;
 // 50 ids in a single call.
 const PER_PLATFORM = 25;
 
+// Consecutive failed batches before a platform is dropped from the walk.
+const MAX_PLATFORM_FAILURES = 3;
+
 // Each live platform, with the sample content that stands in for it while it has
 // no credentials. X is absent because it has no integration at all; its samples
 // are added once alongside the first batch.
@@ -351,13 +354,18 @@ export class BackendUnreachableError extends Error {
     }
 }
 
-// Resolves to { items, configured, next }. The flag matters as much as the
+// Resolves to { ok, items, configured, next }. The flags matter as much as the
 // items: a platform that has no credentials falls back to samples, whereas one
 // that is configured but whose upstream is failing contributes nothing.
 // Replacing real posts with invented ones during an outage would be the worst
 // of both. `next` is the cursor to ask for after this batch, absent once the
 // platform has nothing more; the server normalises every platform to that one
 // shape.
+//
+// `ok` separates "answered, and there is nothing more" from "did not answer".
+// Both used to arrive as a missing cursor, and since a missing cursor is how
+// the walk records exhaustion, a single failed batch retired the platform for
+// the rest of the session.
 async function fetchLive(path, label) {
     let response;
     try {
@@ -388,11 +396,11 @@ async function fetchLive(path, label) {
         // The server flags a missing-credentials response explicitly. Anything
         // else - an upstream 502, say - means the platform is set up and simply
         // not answering right now.
-        return { items: [], configured: body.configured !== false, next: null };
+        return { ok: false, items: [], configured: body.configured !== false, next: null };
     }
 
     const data = await response.json();
-    return { items: data.data || [], configured: true, next: data.paging?.next || null };
+    return { ok: true, items: data.data || [], configured: true, next: data.paging?.next || null };
 }
 
 // The feed is a stream that is extended on demand, not a fixed pool sliced by
@@ -408,6 +416,7 @@ const feed = {
     pool: [],            // everything collected, reordered for cycling at the end
     cursors: {},         // platform key -> cursor to ask for next; null once done
     sampled: new Set(),  // platforms whose sample content has been added
+    failures: {},        // platform key -> consecutive failed batches
     pages: new Map(),    // page -> items, so a repeated call never re-walks
     cycles: 0,
 };
@@ -443,7 +452,25 @@ async function extendStream() {
         }));
 
         const batch = [];
-        for (const { platform, items, configured, next } of results) {
+        for (const { platform, ok, items, configured, next } of results) {
+            if (configured && !ok) {
+                // Answered with an error rather than with posts. Leave the
+                // cursor alone so the next extension asks for this same batch
+                // again - the server's cache backs off for 30s, so a retry
+                // fails fast rather than hammering a broken upstream. Give up
+                // after a few tries so a genuinely dead platform is not asked
+                // on every extension for the rest of the session.
+                const failures = (feed.failures[platform.key] || 0) + 1;
+                feed.failures[platform.key] = failures;
+                if (failures >= MAX_PLATFORM_FAILURES) {
+                    console.warn(`${platform.label} gave up after ${failures} failed batches`);
+                    feed.cursors[platform.key] = null;
+                }
+                continue;
+            }
+
+            feed.failures[platform.key] = 0;
+
             if (!configured) {
                 // No credentials at all: stand in with samples, once, and stop
                 // asking. A platform that is configured but answered with
