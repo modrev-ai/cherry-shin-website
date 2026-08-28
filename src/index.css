@@ -18,6 +18,27 @@ body {
   color: #ffffff;
 }
 
+/* Off-screen until focused, then it lands in the top-left corner. Not
+   display:none and not visibility:hidden - both remove it from the tab order,
+   which would defeat the point of having it. */
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: -9999px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: #ff6b9d;
+  color: #12000a;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  left: 8px;
+}
+
 /* ===== App Container ===== */
 /* One full-screen slide at a time: scrolling advances to the next post rather
    than scrolling the page. scroll-snap-stop keeps a fast flick from skipping. */

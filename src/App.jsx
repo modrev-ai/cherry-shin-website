@@ -34,8 +34,22 @@ function App() {
 
   return (
     <div className="app">
+      {/* The controls sit last in the DOM, after every card, so reaching them
+          by keyboard otherwise means tabbing through the whole feed - and the
+          feed grows as you scroll. This is the only way past it.
+
+          It is also the first focusable thing on the page, and it lives inside
+          the scroll container, so the first Tab puts focus inside .app and
+          arrow keys start scrolling the feed. Before this the first focusable
+          element was further down the hero. */}
+      <a className="skip-link" href="#reel-nav">Skip to feed controls</a>
+
       <HeroSection />
-      <EndlessReels showWide={showWide} />
+
+      <main id="feed">
+        <EndlessReels showWide={showWide} />
+      </main>
+
       <ReelNav showWide={showWide} onToggleWide={() => setShowWide(current => !current)} />
     </div>
   )

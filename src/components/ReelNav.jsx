@@ -16,7 +16,13 @@ function ReelNav({ showWide, onToggleWide }) {
     }
 
     return (
-        <div className="reel-nav">
+        // A nav landmark so it can be jumped to, and the target the skip link
+        // at the top of the page points at.
+        // tabIndex -1 is what makes the skip link actually work. A fragment
+        // link scrolls its target into view but does not focus it unless the
+        // target can hold focus, so without this the next Tab would carry on
+        // from the skip link and land back in the feed.
+        <nav className="reel-nav" id="reel-nav" aria-label="Feed controls" tabIndex={-1}>
             <button
                 type="button"
                 className="nav-btn"
@@ -66,7 +72,7 @@ function ReelNav({ showWide, onToggleWide }) {
                     <path d="M5.5 9.5V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
             </button>
-        </div>
+        </nav>
     )
 }
 
