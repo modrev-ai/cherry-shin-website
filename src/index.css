@@ -26,7 +26,8 @@ body {
   top: 8px;
   left: -9999px;
   z-index: 100;
-  padding: 10px 16px;
+  /* 13px vertical makes this a 44px target once focused. */
+  padding: 13px 16px;
   border-radius: 8px;
   background: #ff6b9d;
   color: #12000a;
@@ -909,7 +910,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  /* Was 20px. Each control gained 18px of padding for its hit area, so the gap
+     gives most of that back and the rail keeps its original height. */
+  gap: 4px;
   z-index: 3;
 }
 
@@ -917,8 +920,15 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  padding: 0;
+  /* The icon stays 26px; the padding is what a thumb actually gets. Without it
+     these were the smallest targets on the page at 26x26, on a site reached
+     almost entirely from a phone. The rail's gap is reduced to match, so the
+     column does not grow taller. */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 9px;
   border: none;
   background: none;
   color: #fff;
@@ -955,8 +965,24 @@ body {
     left: auto;
     right: 12px;
     bottom: 120px;
-    gap: 18px;
+    /* Was 18px. The controls each gained padding to reach a 44px target, so the
+       gap gives it back and the column keeps roughly its previous height. */
+    gap: 2px;
   }
+
+  .reels-grid .media-info {
+    padding-right: 68px;
+  }
+}
+
+/* A landscape card's frame fills the width at any screen size, so it loses the
+   gutter beside the reel the same way a narrow screen does and the rail lands
+   on top of the caption. Reserving the rail's column keeps the title clear of
+   it: the two overlapped by 22px before the controls were widened for touch,
+   and would have overlapped by 36px after. Portrait cards on a wide screen
+   keep their gutter and need no reservation. */
+.reels-grid .media-card--landscape .media-info {
+  padding-right: 68px;
 }
 
 /* ===== Fixed slide navigation ===== */
@@ -1015,10 +1041,9 @@ body {
     gap: 10px;
   }
 
-  .nav-btn {
-    width: 40px;
-    height: 40px;
-  }
+  /* Deliberately not shrunk here. This media query used to drop these to 40px,
+     which is the wrong direction for touch - four at 44px plus the gaps come to
+     206px inside a 375px viewport, so nothing required it. */
 
   .nav-btn--home {
     margin-top: 0;
@@ -1036,7 +1061,8 @@ body {
   align-items: center;
   gap: 8px;
   margin-top: 14px;
-  padding: 10px 18px;
+  /* 13px vertical brings this to a 44px target; it was 38. */
+  padding: 13px 18px;
   border-radius: 999px;
   background: #ff6b9d;
   /* Dark on the brand pink rather than white. White measured 2.68:1 against
