@@ -48,6 +48,12 @@ jobs:
             node --check "$file"
           done
 
+      # The pre-commit hook runs this on staged content, but a hook only
+      # protects machines where it is installed and is bypassable with
+      # --no-verify. The repo is public, so the backstop is worth the seconds.
+      - name: Scan for credentials
+        run: npm run scan:secrets
+
       # A test nobody runs rots - and until the root `test` script existed there
       # was nowhere for a frontend test to run at all, so the feed walk had none
       # despite being the most intricate code here. This runs both suites: the

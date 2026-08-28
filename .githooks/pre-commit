@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# Refuses to commit staged content that carries a credential.
+#
+# This repo is public, so a secret that lands in a commit is scraped within
+# minutes, survives in forks and GitHub's cache, and cannot be unpublished -
+# rotation is the only real remedy. Catching it one commit earlier is cheap;
+# catching it afterwards is not.
+#
+# .gitignore covers `.env*`, which is the obvious case and the only one it can
+# cover. This looks at content, so it also catches a token pasted into a source
+# file, a credential dump copied in under some other name, and `git add -f`.
+#
+# Like the pre-push hook this is a speed bump rather than a gate: it is
+# bypassable, and it only protects machines where it is installed. CI runs the
+# same scanner over the whole tree as a backstop.
+
+set -e
+
+if ! command -v node >/dev/null 2>&1; then
+    echo "pre-commit: node not found, skipping the secret scan" >&2
+    exit 0
+fi
+
+if ! node scripts/scan-secrets.mjs --staged; then
+    echo "" >&2
+    echo "pre-commit: possible credential in the staged changes. Commit aborted." >&2
+    echo "  If it is real: remove it, and rotate it." >&2
+    echo "  If it is a false positive: sharpen the pattern in" >&2
+    echo "  scripts/scan-secrets.mjs, rather than bypassing the check." >&2
+    echo "  Last resort: git commit --no-verify" >&2
+    exit 1
+fi
