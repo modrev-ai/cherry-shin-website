@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>TikTok authorisation — cherrystudio.art</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 56px 20px 96px;
+    background: #0a0a0a; color: #e8e8ef;
+    font: 16px/1.65 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 620px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; margin: 0 0 6px;
+       background: linear-gradient(135deg, #ff6b9d, #c44dff);
+       -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .sub { color: #707080; margin: 0 0 32px; font-size: .95rem; }
+  .card { background: #141420; border: 1px solid #2a2a3e; border-radius: 12px; padding: 20px; }
+  .label { font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: #707080; margin-bottom: 8px; }
+  code#code {
+    display: block; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .9rem; color: #fff; background: #0a0a0a; border: 1px solid #2a2a3e;
+    border-radius: 8px; padding: 12px; min-height: 20px;
+  }
+  code#code.masked { color: #4a4a5a; letter-spacing: .12em; }
+  .row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer;
+    border-radius: 999px; padding: 9px 18px; border: 1px solid #2a2a3e;
+    background: #1d1d2a; color: #e8e8ef;
+  }
+  button.primary { background: #ff6b9d; border-color: #ff6b9d; color: #12000a; }
+  button:focus-visible { outline: 2px solid #ff6b9d; outline-offset: 3px; }
+  .note { color: #9a90a6; font-size: .9rem; margin-top: 26px; }
+  .note strong { color: #e8e8ef; }
+  .err { border-color: #7a2a3a; background: #1e1116; }
+  .err .label { color: #ff8fa8; }
+  a { color: #ff6b9d; }
+  ul { padding-left: 20px; color: #9a90a6; }
+  li { margin: 5px 0; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TikTok authorisation</h1>
+  <p class="sub">Redirect target for the one-off Login Kit authorisation. Nothing here is part of the public site.</p>
+
+  <div id="ok" class="hidden">
+    <div class="card">
+      <div class="label">Authorisation code</div>
+      <code id="code" class="masked"></code>
+      <div class="row">
+        <button class="primary" id="copy" type="button">Copy code</button>
+        <button id="reveal" type="button">Reveal</button>
+      </div>
+    </div>
+    <p class="note"><strong>Kept hidden on purpose.</strong> If you are screen-recording this page
+      for the app review, copy the code without revealing it — an authorisation code should not
+      appear in an uploaded video.</p>
+    <p class="note">This code is <strong>single-use and short-lived</strong>, usually about ten
+      minutes. It must be exchanged for a refresh token on the server, because that exchange needs
+      the client secret, which never belongs in a browser.</p>
+    <div id="granted" class="hidden">
+      <p class="note"><strong>Scopes granted:</strong> <span id="scopes"></span></p>
+    </div>
+  </div>
+
+  <div id="bad" class="hidden">
+    <div class="card err">
+      <div class="label">Authorisation failed</div>
+      <code id="reason"></code>
+    </div>
+    <p class="note">Common causes:</p>
+    <ul>
+      <li>The redirect URI in the request does not exactly match the one registered, including any trailing slash.</li>
+      <li>A requested scope has not been approved for the app.</li>
+      <li>The consent screen was dismissed rather than approved.</li>
+    </ul>
+  </div>
+
+  <div id="idle" class="hidden">
+    <div class="card">
+      <div class="label">Nothing to show</div>
+      <p style="margin:0;color:#9a90a6">Open this page by completing the TikTok authorisation, not
+        directly. It reads the result from the URL.</p>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:40px"><a href="/">Back to cherrystudio.art</a></p>
+</main>
+
+<script>
+  (function () {
+    var q = new URLSearchParams(location.search);
+    var code = q.get('code');
+    var err = q.get('error') || q.get('error_description');
+    var scopes = q.get('scopes');
+
+    var show = function (id) { document.getElementById(id).classList.remove('hidden'); };
+
+    if (err) {
+      document.getElementById('reason').textContent = err;
+      show('bad');
+      return;
+    }
+    if (!code) { show('idle'); return; }
+
+    var el = document.getElementById('code');
+    el.textContent = '•'.repeat(Math.min(code.length, 48));
+    show('ok');
+
+    if (scopes) {
+      document.getElementById('scopes').textContent = scopes;
+      show('granted');
+    }
+
+    document.getElementById('reveal').addEventListener('click', function () {
+      var masked = el.classList.toggle('masked');
+      el.textContent = masked ? '•'.repeat(Math.min(code.length, 48)) : code;
+      this.textContent = masked ? 'Reveal' : 'Hide';
+    });
+
+    document.getElementById('copy').addEventListener('click', function () {
+      var btn = this;
+      navigator.clipboard.writeText(code).then(function () {
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = 'Copy code'; }, 1800);
+      }, function () {
+        btn.textContent = 'Copy failed — reveal it instead';
+      });
+    });
+  })();
+</script>
+</body>
+</html>
