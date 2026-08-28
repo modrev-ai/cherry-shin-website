@@ -315,15 +315,27 @@ const IG_API = process.env.IG_API_BASE || 'https://graph.facebook.com/v18.0';
 
 const IG_FIELDS = 'id,media_type,media_url,thumbnail_url,caption,timestamp,like_count,comments_count,permalink';
 
-// Captions run to many lines and often pad hashtags out with dot-only lines.
-// A card shows one line, so take the first that carries actual words. Split on
-// the newline character itself; trim() takes care of any carriage return.
+// A line carries content if it holds a letter, a number, or an emoji. Emoji
+// count: captions here are frequently nothing but emoji, and testing for
+// letters alone discarded them as empty and replaced real captions with a
+// generic string. Punctuation and format characters match none of these, so
+// the dot-only and zero-width lines creators use to push hashtags down a
+// caption are still skipped, which is what this test is for.
+const CAPTION_CONTENT = /[\p{L}\p{N}\p{Extended_Pictographic}]/u;
+
+// Captions run to many lines. A card shows one, so take the first that says
+// something, preferring a line that survives having its hashtags and mentions
+// stripped. A caption made only of hashtags falls to the second pass and is
+// shown as it stands, which beats replacing it with the generic fallback.
+// Split on the newline character itself; trim() takes care of any carriage
+// return.
 function captionTitle(caption, fallback) {
-    const line = (caption || '')
+    const lines = (caption || '')
         .split(String.fromCharCode(10))
-        .map(part => part.trim())
-        .find(part => /[\p{L}\p{N}]/u.test(part.replace(/[#@]\S+/gu, '')));
-    return line || fallback;
+        .map(part => part.trim());
+
+    const worded = lines.find(part => CAPTION_CONTENT.test(part.replace(/[#@]\S+/gu, '')));
+    return worded || lines.find(part => CAPTION_CONTENT.test(part)) || fallback;
 }
 
 function mapInstagramItem(item) {
