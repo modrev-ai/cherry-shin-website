@@ -324,6 +324,19 @@ function interleaveByPlatform(items, random = Math.random) {
 
 const ITEMS_PER_PAGE = 6;
 
+// How many posts to pull from each platform. The same window is requested on
+// every page, so the pool stays a fixed size and the cycle walk below can rely
+// on its length.
+//
+// Measured against the live APIs before settling on 25: a cold fetch at 25 costs
+// no more than at 12 (~3s, bounded by Facebook, which varies that much on its
+// own regardless of size), while 50 roughly doubles the wait for the first
+// visitor after a cold start. Quota is flat either way - videos.list takes up to
+// 50 ids in a single call. Reaching the rest of the catalogue needs cursor
+// pagination rather than a bigger window; the server already returns the tokens
+// for it.
+const PER_PLATFORM = 25;
+
 // The ordering for one pass over the pool. Seeded by cycle, so every page of a
 // cycle rebuilds the same sequence and pagination can walk it.
 //
@@ -412,13 +425,11 @@ async function fetchLive(path, label) {
 
 export async function fetchMixedMedia(page = 0) {
     try {
-        const perPlatform = ITEMS_PER_PAGE * 2;
-
         const [instagram, youtube, tiktok, facebook] = await Promise.all([
-            fetchLive(`/instagram/media?limit=${perPlatform}`, 'Instagram'),
-            fetchLive(`/youtube/videos?limit=${perPlatform}`, 'YouTube'),
-            fetchLive(`/tiktok/posts?limit=${perPlatform}`, 'TikTok'),
-            fetchLive(`/facebook/posts?limit=${perPlatform}`, 'Facebook'),
+            fetchLive(`/instagram/media?limit=${PER_PLATFORM}`, 'Instagram'),
+            fetchLive(`/youtube/videos?limit=${PER_PLATFORM}`, 'YouTube'),
+            fetchLive(`/tiktok/posts?limit=${PER_PLATFORM}`, 'TikTok'),
+            fetchLive(`/facebook/posts?limit=${PER_PLATFORM}`, 'Facebook'),
         ]);
 
         // Live data where a platform is connected, samples only where it has no
