@@ -1052,7 +1052,9 @@ body {
   transition: transform 0.2s ease, color 0.2s ease;
 }
 
-.action-btn:hover {
+/* Only the real control reacts to a pointer. A readout that grew and changed
+   colour under the cursor was reading as a button when it is not one. */
+.action-btn:not(.action-btn--stat):hover {
   transform: scale(1.12);
   color: #ff6b9d;
 }
@@ -1065,10 +1067,6 @@ body {
 
 .action-count {
   color: rgba(255, 255, 255, 0.92);
-}
-
-.action-btn--more {
-  opacity: 0.85;
 }
 
 /* Once the reel fills the width there is no gutter left, so the rail moves
@@ -1191,7 +1189,7 @@ body {
 }
 
 .reels-grid .watch-button,
-.reels-grid .action-btn {
+.reels-grid .action-btn:not(.action-btn--stat) {
   cursor: pointer;
 }
 
@@ -1301,8 +1299,8 @@ body {
   transform: translateY(-50%);
 }
 
-/* A view count is a readout, not a control */
-.reels-grid .action-btn--stat {
+/* A count is a readout, not a control */
+.action-btn--stat {
   cursor: default;
 }
 
