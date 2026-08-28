@@ -167,8 +167,12 @@ themselves absent when a post has no shares.
 
 Facebook refuses to embed posts whose audio it judges to be someone else's — most reels with
 music. No API field reports this, so the server probes the embed page once per cache window and
-falls back to the still plus a watch button. On the current Page roughly half the posts are
-affected. Nothing to configure; it is automatic.
+falls back to the still plus a watch button. Counted across the whole Page, **33 of 95 posts are
+affected — about a third**. Nothing to configure; it is automatic.
+
+That figure previously read "roughly half", which was a fair reading of the six posts then
+reachable but wrong against the full Page. Re-check it by walking `/api/facebook/posts` with its
+`after` cursor and counting items with a null `embedUrl`.
 
 ### Instagram is deliberately not embedded
 
