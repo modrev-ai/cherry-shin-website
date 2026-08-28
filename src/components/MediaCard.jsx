@@ -69,9 +69,21 @@ function MediaCard({ item, index }) {
                         <div className="skeleton-pulse"></div>
                     </div>
                 )}
+                {/* Every card ever scrolled past stays mounted, so without this
+                    each one fetches and decodes its thumbnail on mount - hundreds
+                    of images for a reader who went deep into the feed.
+
+                    lazy was tried once before and deadlocked: the image was
+                    hidden until onLoad, so it was never near the viewport, so it
+                    never loaded, so onLoad never fired. That gating is gone - the
+                    image is always in the layout and the skeleton sits behind it -
+                    and an image already in view loads immediately even when
+                    marked lazy, so first paint is unaffected. */}
                 <img
                     src={item.thumbnail}
                     alt={item.title}
+                    loading="lazy"
+                    decoding="async"
                     onLoad={() => setLoaded(true)}
                     onError={() => setError(true)}
                 />
