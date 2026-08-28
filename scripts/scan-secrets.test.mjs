@@ -23,13 +23,18 @@ const check = (name, ok, detail = '') => {
 
 const dir = mkdtempSync(join(tmpdir(), 'scan-secrets-'))
 
+// stderr must be piped, not inherited. execFileSync forwards a child's stderr
+// to the parent by default, which meant every passing run printed the scanner's
+// "rotate it" guidance into the push and CI logs - and a real warning is worth
+// nothing once a clean run looks identical to a dirty one.
+const opts = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+
 // Runs the scanner against one file and reports how it exited.
 function scan(filename, contents) {
     const path = join(dir, filename)
     writeFileSync(path, contents)
     try {
-        const out = execFileSync('node', ['scripts/scan-secrets.mjs', path], { encoding: 'utf8' })
-        return { blocked: false, output: out }
+        return { blocked: false, output: execFileSync('node', ['scripts/scan-secrets.mjs', path], opts) }
     } catch (err) {
         return { blocked: true, output: `${err.stdout || ''}${err.stderr || ''}` }
     }
@@ -96,7 +101,7 @@ for (const [label, filename, contents] of ALLOWED) {
     let clean = true
     let detail = ''
     try {
-        execFileSync('node', ['scripts/scan-secrets.mjs'], { encoding: 'utf8' })
+        execFileSync('node', ['scripts/scan-secrets.mjs'], opts)
     } catch (err) {
         clean = false
         detail = `${err.stdout || ''}${err.stderr || ''}`.trim().split('\n').slice(0, 4).join(' / ')
