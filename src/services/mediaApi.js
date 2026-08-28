@@ -269,26 +269,43 @@ const allContent = [
     ...twitterContent,
 ];
 
-function shuffleArray(array) {
+// Small deterministic PRNG. Pagination slices a window out of an ordering, so
+// that ordering has to stay put across the pages being sliced from it - with
+// Math.random every page reshuffled and the offsets pointed into unrelated
+// permutations, which repeated some posts and skipped others entirely.
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function random() {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function shuffleArray(array, random = Math.random) {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled;
 }
 
 // Round-robin across platforms so consecutive posts come from different sources:
-// Instagram, then TikTok, then Facebook, and so on. Within a platform the order is
-// shuffled, and the platform order rotates per call so the feed varies between pages.
-function interleaveByPlatform(items) {
+// Instagram, then TikTok, then Facebook, and so on. Within a platform the order
+// is shuffled, and the platform order rotates too, so the feed varies between
+// cycles. Pass a seeded `random` to get the same ordering back for every page of
+// one cycle; the default keeps callers that want a one-off shuffle.
+function interleaveByPlatform(items, random = Math.random) {
     const byPlatform = new Map();
     for (const item of items) {
         if (!byPlatform.has(item.platform)) byPlatform.set(item.platform, []);
         byPlatform.get(item.platform).push(item);
     }
 
-    const queues = shuffleArray([...byPlatform.values()]).map(shuffleArray);
+    const queues = shuffleArray([...byPlatform.values()], random)
+        .map(queue => shuffleArray(queue, random));
 
     const ordered = [];
     let placed = true;
@@ -306,6 +323,27 @@ function interleaveByPlatform(items) {
 }
 
 const ITEMS_PER_PAGE = 6;
+
+// The ordering for one pass over the pool. Seeded by cycle, so every page of a
+// cycle rebuilds the same sequence and pagination can walk it.
+//
+// Once the pool is exhausted the feed necessarily starts repeating - there is
+// nothing else to show. What it must not do is repeat across the join, where
+// the last post of one pass would land immediately before the first of the
+// next and read as a stutter on two consecutive slides. Swapping the opening
+// pair when that happens avoids it, and leaves the tail alone so the next
+// cycle's comparison stays valid.
+function orderingForCycle(pool, cycle) {
+    const ordered = interleaveByPlatform(pool, mulberry32(cycle + 1));
+    if (cycle === 0 || ordered.length < 3) return ordered;
+
+    const previous = interleaveByPlatform(pool, mulberry32(cycle));
+    if (ordered[0].id !== previous[previous.length - 1].id) return ordered;
+
+    const swapped = [...ordered];
+    [swapped[0], swapped[1]] = [swapped[1], swapped[0]];
+    return swapped;
+}
 
 // A platform contributes its real posts once it is configured, and samples only
 // while it is not. Once it goes live its samples stop being served entirely,
@@ -400,23 +438,26 @@ export async function fetchMixedMedia(page = 0) {
         // Simulate slight delay for smooth UX
         await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 300));
 
-        // Endless scrolling: cycle through the content pool, re-interleaved each page
-        const ordered = interleaveByPlatform(pool);
+        if (pool.length === 0) return [];
 
-        // If we've cycled through all items, start over with a new shuffle
-        const start = (page % Math.ceil(pool.length / ITEMS_PER_PAGE)) * ITEMS_PER_PAGE;
-        const end = start + ITEMS_PER_PAGE;
+        // Endless scrolling walks the pool one page at a time, then starts a new
+        // cycle in a different order. Seeding the shuffle from the cycle number
+        // is what makes the walk coherent: every page of a cycle rebuilds the
+        // same ordering, so page 2 genuinely continues where page 1 stopped
+        // instead of slicing into an unrelated permutation.
+        const pagesPerCycle = Math.ceil(pool.length / ITEMS_PER_PAGE);
+        const cycle = Math.floor(page / pagesPerCycle);
+        const ordered = orderingForCycle(pool, cycle);
 
-        // If we need more items than the pool, wrap around
-        let result = [];
-        for (let i = start; i < end; i++) {
-            const idx = i % pool.length;
-            // Add a unique suffix to prevent React key conflicts on repeat cycles
-            const item = { ...ordered[idx], cycleId: `${page}-${i}` };
-            result.push(item);
-        }
+        // The last page of a cycle is short rather than padded from the front,
+        // which would show a post twice in the same pass. Slicing past the end
+        // simply yields fewer items, and the next page opens the next cycle.
+        const start = (page % pagesPerCycle) * ITEMS_PER_PAGE;
 
-        return result;
+        // cycleId keeps React keys unique when a post comes round again.
+        return ordered
+            .slice(start, start + ITEMS_PER_PAGE)
+            .map((item, offset) => ({ ...item, cycleId: `${page}-${start + offset}` }));
     } catch (error) {
         // A dead backend must reach the UI so it can offer a retry, rather than
         // being flattened into "no more content" or masked by sample posts.
