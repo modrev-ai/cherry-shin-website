@@ -1,0 +1,10 @@
+# Without this file the single-page-app rewrite answers /robots.txt with the
+# feed's HTML, which a crawler cannot parse. Static files in public/ take
+# precedence over that rewrite, so a real file here is served as itself.
+
+User-agent: *
+Allow: /
+
+# The API serves JSON for the feed to consume. There is nothing there for a
+# search engine, and crawling it would call the platform APIs against our quota.
+Disallow: /api/
