@@ -570,13 +570,12 @@ export async function fetchMixedMedia(page = 0) {
     // Keep the queue alive after a failure so the next page is not blocked by it.
     queue = run.catch(() => {});
 
-    try {
-        return await run;
-    } catch (error) {
-        // A dead backend must reach the UI so it can offer a retry, rather than
-        // being flattened into "no more content" or masked by sample posts.
-        if (error instanceof BackendUnreachableError) throw error;
-        console.error('fetchMixedMedia error:', error);
-        return [];
-    }
+    // Every failure reaches the UI so it can offer a retry. Returning an empty
+    // page instead would be read as the end of the feed, which stops the scroll
+    // sentinel and finishes the session - and an empty page cannot happen for
+    // any honest reason: X's samples go into the pool on the first extension,
+    // so the cycling branch can always extend the stream. An empty page only
+    // ever means something threw, and a timeout bug that returned one blanked
+    // the whole site rather than costing one platform.
+    return run;
 }

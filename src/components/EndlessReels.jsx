@@ -141,6 +141,21 @@ function EndlessReels({ showWide = true }) {
                 </div>
             )}
 
+            {/* Nothing loaded, nothing loading, nothing reported. Every other
+                branch above needs at least one item or a recorded error, so
+                without this the feed renders an empty screen with no
+                explanation and no way out - which is what a swallowed error
+                used to produce. */}
+            {mediaItems.length === 0 && !loading && !error && (
+                <div className="reels-error">
+                    <h3>No posts loaded</h3>
+                    <p>The feed came back empty, which usually means a request failed.</p>
+                    <button type="button" className="reels-retry" onClick={retry}>
+                        Try again
+                    </button>
+                </div>
+            )}
+
             {/* Always-visible sentinel for infinite scroll trigger */}
             <div ref={loaderRef} style={{ height: '1px' }} />
         </div>
