@@ -126,11 +126,23 @@ function mapFacebookPost(post) {
     };
 }
 
-async function fetchFacebookPosts({ limit = 12 } = {}) {
+// Graph APIs report another page by including `paging.next`, but the value to
+// send back is `paging.cursors.after` - and `after` is present even on the last
+// page, so testing it alone walks forever. Normalise both to the one shape the
+// client understands: { next } holding the cursor to ask for, or null when the
+// catalogue is finished.
+function graphPaging(paging) {
+    if (!paging?.next) return null;
+    const after = paging.cursors?.after;
+    return after ? { next: after } : null;
+}
+
+async function fetchFacebookPosts({ limit = 12, after = null } = {}) {
     const request = async (fields) => {
         const url = `${FB_API}/${FB_PAGE_ID}/posts`
             + `?fields=${fields.join(',')}`
             + `&limit=${limit}`
+            + (after ? `&after=${encodeURIComponent(after)}` : '')
             + `&access_token=${FB_PAGE_ACCESS_TOKEN}`;
         const response = await fetch(url);
         return response.json();
@@ -167,7 +179,7 @@ async function fetchFacebookPosts({ limit = 12 } = {}) {
         console.warn(`Facebook: ${blocked} of ${items.length} posts cannot be embedded; showing stills`);
     }
 
-    return { data: items, paging: data.paging || null };
+    return { data: items, paging: graphPaging(data.paging) };
 }
 
 // Access tokens last about a day, so one is held in memory and refreshed a
@@ -382,7 +394,7 @@ async function fetchInstagramMedia(token, { limit = 12, after = null } = {}) {
 
     return {
         data: (data.data || []).map(mapInstagramItem),
-        paging: data.paging || null,
+        paging: graphPaging(data.paging),
     };
 }
 
@@ -442,11 +454,12 @@ async function isShort(videoId) {
     }
 }
 
-async function fetchYouTubeVideos({ limit = 12 } = {}) {
+async function fetchYouTubeVideos({ limit = 12, after = null } = {}) {
     const playlist = await ytGet('playlistItems', {
         part: 'snippet,contentDetails',
         playlistId: uploadsPlaylistId(YOUTUBE_CHANNEL_ID),
         maxResults: String(Math.min(limit, 50)),
+        ...(after ? { pageToken: after } : {}),
     });
 
     const ids = (playlist.items || [])
@@ -695,15 +708,17 @@ app.get('/api/instagram/media', async (req, res) => {
         const tokenCache = await loadTokenCache();
         const token = tokenCache.accessToken;
         const limit = Number(req.query.limit) || 12;
+        const after = req.query.after || null;
 
         if (isPlaceholderToken(token) || isPlaceholderToken(IG_USER_ID)) {
             return res.status(500).json({ configured: false, error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
         }
 
-        // Keyed by limit so different page sizes do not clobber each other.
+        // Keyed by limit and cursor so different page sizes and different points
+        // in the walk do not clobber each other.
         const result = await cached(
-            `ig:media:${limit}`,
-            () => fetchInstagramMedia(token, { limit }),
+            `ig:media:${limit}:${after || 'first'}`,
+            () => fetchInstagramMedia(token, { limit, after }),
             { ttlMs: CACHE_TTL_MS }
         );
 
@@ -774,14 +789,15 @@ app.get('/api/instagram/media/next', async (req, res) => {
 app.get('/api/youtube/videos', async (req, res) => {
     try {
         const limit = Number(req.query.limit) || 12;
+        const after = req.query.after || null;
 
         if (isPlaceholderToken(YOUTUBE_API_KEY) || isPlaceholderToken(YOUTUBE_CHANNEL_ID)) {
             return res.status(500).json({ configured: false, error: 'YouTube not configured. Set YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID in .env' });
         }
 
         const result = await cached(
-            `yt:videos:${limit}`,
-            () => fetchYouTubeVideos({ limit }),
+            `yt:videos:${limit}:${after || 'first'}`,
+            () => fetchYouTubeVideos({ limit, after }),
             { ttlMs: CACHE_TTL_MS }
         );
 
@@ -796,14 +812,15 @@ app.get('/api/youtube/videos', async (req, res) => {
 app.get('/api/facebook/posts', async (req, res) => {
     try {
         const limit = Number(req.query.limit) || 12;
+        const after = req.query.after || null;
 
         if (!isFacebookConfigured()) {
             return res.status(500).json({ configured: false, error: 'Facebook not configured. Set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN in .env' });
         }
 
         const result = await cached(
-            `fb:posts:${limit}`,
-            () => fetchFacebookPosts({ limit }),
+            `fb:posts:${limit}:${after || 'first'}`,
+            () => fetchFacebookPosts({ limit, after }),
             { ttlMs: CACHE_TTL_MS }
         );
 

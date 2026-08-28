@@ -324,47 +324,25 @@ function interleaveByPlatform(items, random = Math.random) {
 
 const ITEMS_PER_PAGE = 6;
 
-// How many posts to pull from each platform. The same window is requested on
-// every page, so the pool stays a fixed size and the cycle walk below can rely
-// on its length.
+// How many posts to pull from each platform per batch. The walk asks for the
+// next batch only when the reader gets close to the end of what is loaded.
 //
-// Measured against the live APIs before settling on 25: a cold fetch at 25 costs
+// Measured against the live APIs before settling on 25: a cold batch at 25 costs
 // no more than at 12 (~3s, bounded by Facebook, which varies that much on its
 // own regardless of size), while 50 roughly doubles the wait for the first
 // visitor after a cold start. Quota is flat either way - videos.list takes up to
-// 50 ids in a single call. Reaching the rest of the catalogue needs cursor
-// pagination rather than a bigger window; the server already returns the tokens
-// for it.
+// 50 ids in a single call.
 const PER_PLATFORM = 25;
 
-// The ordering for one pass over the pool. Seeded by cycle, so every page of a
-// cycle rebuilds the same sequence and pagination can walk it.
-//
-// Once the pool is exhausted the feed necessarily starts repeating - there is
-// nothing else to show. What it must not do is repeat across the join, where
-// the last post of one pass would land immediately before the first of the
-// next and read as a stutter on two consecutive slides. Swapping the opening
-// pair when that happens avoids it, and leaves the tail alone so the next
-// cycle's comparison stays valid.
-function orderingForCycle(pool, cycle) {
-    const ordered = interleaveByPlatform(pool, mulberry32(cycle + 1));
-    if (cycle === 0 || ordered.length < 3) return ordered;
-
-    const previous = interleaveByPlatform(pool, mulberry32(cycle));
-    if (ordered[0].id !== previous[previous.length - 1].id) return ordered;
-
-    const swapped = [...ordered];
-    [swapped[0], swapped[1]] = [swapped[1], swapped[0]];
-    return swapped;
-}
-
-// A platform contributes its real posts once it is configured, and samples only
-// while it is not. Once it goes live its samples stop being served entirely,
-// including on the days it happens to return nothing.
-function withSamples({ items, configured }, samples) {
-    if (configured) return items;
-    return samples;
-}
+// Each live platform, with the sample content that stands in for it while it has
+// no credentials. X is absent because it has no integration at all; its samples
+// are added once alongside the first batch.
+const PLATFORMS = [
+    { key: 'instagram', label: 'Instagram', path: '/instagram/media', samples: instagramContent },
+    { key: 'youtube', label: 'YouTube', path: '/youtube/videos', samples: youtubeContent },
+    { key: 'tiktok', label: 'TikTok', path: '/tiktok/posts', samples: tiktokContent },
+    { key: 'facebook', label: 'Facebook', path: '/facebook/posts', samples: facebookContent },
+];
 
 // Pulls one platform's feed from the backend. The server normalises every
 // platform into the same item shape, so nothing needs remapping here. An
@@ -382,10 +360,13 @@ export class BackendUnreachableError extends Error {
     }
 }
 
-// Resolves to { items, configured }. The flag matters as much as the items: a
-// platform that has no credentials falls back to samples, whereas one that is
-// configured but whose upstream is failing contributes nothing. Replacing real
-// posts with invented ones during an outage would be the worst of both.
+// Resolves to { items, configured, next }. The flag matters as much as the
+// items: a platform that has no credentials falls back to samples, whereas one
+// that is configured but whose upstream is failing contributes nothing.
+// Replacing real posts with invented ones during an outage would be the worst
+// of both. `next` is the cursor to ask for after this batch, absent once the
+// platform has nothing more; the server normalises every platform to that one
+// shape.
 async function fetchLive(path, label) {
     let response;
     try {
@@ -416,59 +397,132 @@ async function fetchLive(path, label) {
         // The server flags a missing-credentials response explicitly. Anything
         // else - an upstream 502, say - means the platform is set up and simply
         // not answering right now.
-        return { items: [], configured: body.configured !== false };
+        return { items: [], configured: body.configured !== false, next: null };
     }
 
     const data = await response.json();
-    return { items: data.data || [], configured: true };
+    return { items: data.data || [], configured: true, next: data.paging?.next || null };
+}
+
+// The feed is a stream that is extended on demand, not a fixed pool sliced by
+// modulo arithmetic. Page N is served from stream[6N..6N+5]; when the stream is
+// too short it is extended, first by fetching the next batch from every platform
+// that still has a cursor, and only once the catalogue is exhausted by appending
+// another ordering of everything collected.
+//
+// Cursors are opaque and cannot be jumped to, so the position in the walk has to
+// be remembered here rather than derived from the page number.
+const feed = {
+    stream: [],          // items in serving order
+    pool: [],            // everything collected, reordered for cycling at the end
+    cursors: {},         // platform key -> cursor to ask for next; null once done
+    sampled: new Set(),  // platforms whose sample content has been added
+    pages: new Map(),    // page -> items, so a repeated call never re-walks
+    cycles: 0,
+};
+
+// Extensions are serialised. StrictMode double-invokes effects and a retry can
+// land while a fetch is in flight; without this two callers could both extend
+// and append the same batch twice.
+let queue = Promise.resolve();
+
+// Never put the same post on two consecutive slides. Once the catalogue runs out
+// the feed has to repeat - there is nothing else to show - but a post landing
+// directly after itself reads as a stutter rather than a loop.
+function appendToStream(items) {
+    if (!items.length) return;
+    const last = feed.stream[feed.stream.length - 1];
+    const next = [...items];
+    if (last && next[0].id === last.id && next.length > 1) {
+        [next[0], next[1]] = [next[1], next[0]];
+    }
+    feed.stream.push(...next);
+}
+
+// Returns false only when there is nothing left to add at all, which stops the
+// caller looping forever on an empty feed.
+async function extendStream() {
+    const active = PLATFORMS.filter(platform => feed.cursors[platform.key] !== null);
+
+    if (active.length) {
+        const results = await Promise.all(active.map(async platform => {
+            const cursor = feed.cursors[platform.key];
+            const query = `?limit=${PER_PLATFORM}` + (cursor ? `&after=${encodeURIComponent(cursor)}` : '');
+            return { platform, ...await fetchLive(platform.path + query, platform.label) };
+        }));
+
+        const batch = [];
+        for (const { platform, items, configured, next } of results) {
+            if (!configured) {
+                // No credentials at all: stand in with samples, once, and stop
+                // asking. A platform that is configured but answered with
+                // nothing is different - it contributes nothing rather than
+                // reverting to invented posts under its own name.
+                if (!feed.sampled.has(platform.key)) {
+                    feed.sampled.add(platform.key);
+                    batch.push(...platform.samples);
+                }
+                feed.cursors[platform.key] = null;
+                continue;
+            }
+            batch.push(...items);
+            // No cursor back means the catalogue is finished. TikTok oEmbed
+            // never sends one, so it retires after its first batch.
+            feed.cursors[platform.key] = next || null;
+        }
+
+        if (!feed.sampled.has('twitter')) {
+            feed.sampled.add('twitter');
+            batch.push(...twitterContent);
+        }
+
+        if (batch.length) {
+            const ordered = interleaveByPlatform(batch);
+            feed.pool.push(...ordered);
+            appendToStream(ordered);
+            return true;
+        }
+    }
+
+    // Everything is exhausted, so start the catalogue again in a fresh order.
+    if (feed.pool.length) {
+        feed.cycles += 1;
+        appendToStream(interleaveByPlatform(feed.pool, mulberry32(feed.cycles)));
+        return true;
+    }
+
+    return false;
+}
+
+async function servePage(page) {
+    // May have been filled by another caller while this one waited its turn.
+    if (feed.pages.has(page)) return feed.pages.get(page);
+
+    const needed = (page + 1) * ITEMS_PER_PAGE;
+    while (feed.stream.length < needed) {
+        if (!await extendStream()) break;
+    }
+
+    const start = page * ITEMS_PER_PAGE;
+    // cycleId keeps React keys unique when a post comes round again.
+    const items = feed.stream
+        .slice(start, start + ITEMS_PER_PAGE)
+        .map((item, offset) => ({ ...item, cycleId: `${page}-${start + offset}` }));
+
+    feed.pages.set(page, items);
+    return items;
 }
 
 export async function fetchMixedMedia(page = 0) {
+    const served = feed.pages.get(page);
+    if (served) return served;
+
+    const run = queue.then(() => servePage(page));
+    // Keep the queue alive after a failure so the next page is not blocked by it.
+    queue = run.catch(() => {});
+
     try {
-        const [instagram, youtube, tiktok, facebook] = await Promise.all([
-            fetchLive(`/instagram/media?limit=${PER_PLATFORM}`, 'Instagram'),
-            fetchLive(`/youtube/videos?limit=${PER_PLATFORM}`, 'YouTube'),
-            fetchLive(`/tiktok/posts?limit=${PER_PLATFORM}`, 'TikTok'),
-            fetchLive(`/facebook/posts?limit=${PER_PLATFORM}`, 'Facebook'),
-        ]);
-
-        // Live data where a platform is connected, samples only where it has no
-        // credentials at all, so the feed stays whole while the remaining
-        // platforms are still being set up. Note the test is `configured`, not
-        // item count: a connected platform that returns nothing this minute
-        // shows nothing, rather than reverting to invented posts under its own
-        // name. X has no integration at all, so it is always sampled.
-        const pool = [
-            ...withSamples(tiktok, tiktokContent),
-            ...withSamples(facebook, facebookContent),
-            ...twitterContent,
-            ...withSamples(youtube, youtubeContent),
-            ...withSamples(instagram, instagramContent),
-        ];
-
-        // Simulate slight delay for smooth UX
-        await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 300));
-
-        if (pool.length === 0) return [];
-
-        // Endless scrolling walks the pool one page at a time, then starts a new
-        // cycle in a different order. Seeding the shuffle from the cycle number
-        // is what makes the walk coherent: every page of a cycle rebuilds the
-        // same ordering, so page 2 genuinely continues where page 1 stopped
-        // instead of slicing into an unrelated permutation.
-        const pagesPerCycle = Math.ceil(pool.length / ITEMS_PER_PAGE);
-        const cycle = Math.floor(page / pagesPerCycle);
-        const ordered = orderingForCycle(pool, cycle);
-
-        // The last page of a cycle is short rather than padded from the front,
-        // which would show a post twice in the same pass. Slicing past the end
-        // simply yields fewer items, and the next page opens the next cycle.
-        const start = (page % pagesPerCycle) * ITEMS_PER_PAGE;
-
-        // cycleId keeps React keys unique when a post comes round again.
-        return ordered
-            .slice(start, start + ITEMS_PER_PAGE)
-            .map((item, offset) => ({ ...item, cycleId: `${page}-${start + offset}` }));
+        return await run;
     } catch (error) {
         // A dead backend must reach the UI so it can offer a retry, rather than
         // being flattened into "no more content" or masked by sample posts.
