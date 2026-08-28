@@ -328,6 +328,19 @@ const PER_PLATFORM = 25;
 // Consecutive failed batches before a platform is dropped from the walk.
 const MAX_PLATFORM_FAILURES = 3;
 
+// How long to wait for one platform before giving up on it for this batch.
+//
+// The four platforms are fetched together, so without a bound the first page
+// waits for the slowest: a cold Facebook was measured at 20s, because it probes
+// embeddability once per post and there is no API field that reports it. The
+// other three answer in 1-3s, so a reader was watching a spinner for twenty
+// seconds to get posts that had been ready for seventeen.
+//
+// Nothing is lost by cutting it off. The abort is client-side only - the server
+// finishes the work and caches it - so the platform simply joins on the next
+// extension, by which point its batch is already warm.
+const PLATFORM_TIMEOUT_MS = 6000;
+
 // Each live platform, with the sample content that stands in for it while it has
 // no credentials. X is absent because it has no integration at all; its samples
 // are added once alongside the first batch.
@@ -369,9 +382,20 @@ export class BackendUnreachableError extends Error {
 async function fetchLive(path, label) {
     let response;
     try {
-        response = await fetch(`${API_BASE}${path}`);
+        response = await fetch(`${API_BASE}${path}`, {
+            signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
+        });
     } catch (err) {
-        // fetch only rejects on a network-level failure
+        // A timeout is this platform being slow, not the backend being gone, so
+        // it must not take the whole feed down with it. The server keeps working
+        // after we walk away and stores the result, so the retry on the next
+        // extension finds it cached - measured at 16ms against a request that
+        // had just been abandoned at 1.2s.
+        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+            console.warn(`${label} exceeded ${PLATFORM_TIMEOUT_MS}ms; it will be retried`);
+            return { ok: false, items: [], configured: true, next: null };
+        }
+        // fetch otherwise rejects only on a network-level failure
         throw new BackendUnreachableError(err);
     }
 
