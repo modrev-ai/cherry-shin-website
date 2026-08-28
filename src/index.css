@@ -169,7 +169,7 @@ body {
 
 .stat-label {
   font-size: 0.85rem;
-  color: #707080;
+  color: #7c7c8e;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -372,7 +372,7 @@ body {
 }
 
 .loading-text {
-  color: #707080;
+  color: #7c7c8e;
   font-size: 0.9rem;
 }
 
@@ -384,7 +384,7 @@ body {
   justify-content: center;
   padding: 80px 20px;
   gap: 15px;
-  color: #707080;
+  color: #7c7c8e;
 }
 
 .empty-state-icon {
@@ -468,7 +468,7 @@ body {
 }
 
 .reels-header p {
-  color: #707080;
+  color: #7c7c8e;
   font-size: 1rem;
 }
 
@@ -611,7 +611,7 @@ body {
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #1a1a2e, #2a2a3e);
-  color: #707080;
+  color: #7c7c8e;
   font-size: 0.9rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -656,7 +656,7 @@ body {
   justify-content: center;
   padding: 80px 20px;
   gap: 16px;
-  color: #707080;
+  color: #7c7c8e;
 }
 
 .reels-loading p {
@@ -683,7 +683,7 @@ body {
   grid-column: 1 / -1;
   text-align: center;
   padding: 40px 20px;
-  color: #707080;
+  color: #7c7c8e;
 }
 
 @media (max-width: 600px) {
@@ -1039,7 +1039,11 @@ body {
   padding: 10px 18px;
   border-radius: 999px;
   background: #ff6b9d;
-  color: #fff;
+  /* Dark on the brand pink rather than white. White measured 2.68:1 against
+     this background, well under the 4.5:1 needed, and this is the only control
+     that takes a visitor to the actual post. The skip link already pairs this
+     ink with this pink and measures 7.61:1. */
+  color: #12000a;
   font-size: 0.85rem;
   font-weight: 600;
   text-decoration: none;
