@@ -11,9 +11,9 @@ A full-screen reel feed that mirrors Cherry Shin's posts from several social pla
 | Platform | State | Needs |
 | --- | --- | --- |
 | YouTube | **Live** | already configured |
-| Instagram | Wired, not configured | `IG_ACCESS_TOKEN` + `IG_USER_ID` |
-| TikTok | Two routes: Display API, or oEmbed | `TIKTOK_CLIENT_*` / `TIKTOK_POST_URLS` |
-| Facebook | Wired, not configured | `FB_PAGE_ID` + `FB_PAGE_ACCESS_TOKEN` |
+| Instagram | **Live** | already configured |
+| Facebook | **Live** | like and comment counts need `pages_read_user_content` (MRO-248) |
+| TikTok | Built, sample content | `TIKTOK_POST_URLS` for oEmbed, or `TIKTOK_CLIENT_*` for the Display API |
 | X | Sample content | paid API tier |
 
 Any platform without credentials falls back to sample content for that platform only, so the feed
@@ -75,12 +75,12 @@ src/
     HeroSection.jsx           first slide; audience stats and the scroll cue
     EndlessReels.jsx          feed, infinite scroll, error and retry states
     MediaCard.jsx             one slide: media, inline player, caption, watch button
-    MediaActions.jsx          right-hand rail: views, likes, comments, share, save
+    MediaActions.jsx          right-hand rail: view/like/comment readouts, and copy-link
     ReelNav.jsx               fixed controls: previous, next, wide-post toggle, home
     PlatformIcon.jsx          per-platform badge
   constants/platforms.js      platform labels and orientation resolution
   hooks/useInfiniteScroll.js  IntersectionObserver that triggers the next page
-  services/mediaApi.js        fetches each platform, interleaves, falls back to samples
+  services/mediaApi.js        walks each platform by cursor into one interleaved stream
 server/
   index.js                    Express app and all routes; exports the app
   cache.js                    TTL cache with coalescing and stale-on-error
@@ -91,12 +91,17 @@ api/index.js                  Vercel entry point; delegates to the Express app
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/youtube/videos?limit=` | uploads, with Shorts detected so portrait video is not letterboxed |
-| `GET /api/instagram/media?limit=` | recent media |
-| `GET /api/instagram/media/next?cursor=` | pagination |
+| `GET /api/youtube/videos?limit=&after=` | uploads, with Shorts detected so portrait video is not letterboxed |
+| `GET /api/instagram/media?limit=&after=` | recent media |
+| `GET /api/facebook/posts?limit=&after=` | Page posts, with embeddability probed per post |
+| `GET /api/tiktok/posts?limit=` | oEmbed for the configured post URLs; no cursor, the list is fixed |
 | `GET /api/instagram/status` | token validity |
 | `GET /api/stats` | audience totals aggregated across configured platforms |
 | `GET /api/cache/stats` | hit rate and upstream call counts |
+
+`after` is the cursor from the previous response's `paging.next`; its absence means the platform
+has nothing more. Every platform is normalised to that one shape. `GET /api/instagram/media/next`
+still exists but is superseded by `/api/instagram/media?after=` and nothing calls it.
 
 Responses carry `X-Cache: HIT | MISS | STALE` and an `Age` header.
 
@@ -134,7 +139,7 @@ to sample content.
 | `FB_PAGE_ACCESS_TOKEN` | Facebook **Page** access token, not a user token |
 | `CACHE_TTL_MS` | cache freshness window, default 600000 |
 | `PORT` | API port, default 3001 |
-| `YT_API_BASE`, `IG_API_BASE` | override upstream base URLs, for testing |
+| `YT_API_BASE`, `IG_API_BASE`, `FB_API_BASE`, `TIKTOK_API_BASE`, `TIKTOK_OEMBED_BASE` | override upstream base URLs, for testing |
 
 `server/.env` is gitignored. In production these live in Vercel's environment variables.
 
@@ -160,7 +165,7 @@ Shorts are detected by requesting `youtube.com/shorts/{id}`: YouTube serves it f
 redirects for anything else. The API exposes no aspect ratio — `player.embedHtml` reports 480x270
 for every video, and duration is ambiguous because Shorts may run to three minutes.
 
-### Instagram — wired, needs credentials
+### Instagram — done
 
 The Instagram Basic Display API was **shut down in December 2024**. This uses the Instagram Graph
 API instead.
@@ -174,14 +179,21 @@ Then: Meta Developers → create a Business-type app → add the Instagram produ
 Graph API Explorer → generate a token with `instagram_basic`, `pages_show_list` and
 `pages_read_engagement` → exchange it for a long-lived token.
 
-Set **both** `IG_ACCESS_TOKEN` and `IG_USER_ID`. Long-lived tokens expire after about 60 days, so
-this needs a refresh path before it can be left alone.
+Set **both** `IG_ACCESS_TOKEN` and `IG_USER_ID`. Setting one alone counts as unconfigured,
+deliberately, so a half-finished setup fails loudly rather than querying the wrong account.
 
-### Facebook — wired, needs credentials
+**The token does not need refreshing.** The 60-day expiry applies to a long-lived *user* token; what
+the site runs on is a **Page** token derived from one, and that does not expire. It stays valid
+until the password changes or the app's permissions are revoked.
 
-Built and ready; set `FB_PAGE_ID` and `FB_PAGE_ACCESS_TOKEN` and it goes live. Both are required —
-setting one alone counts as unconfigured, deliberately, so a half-finished setup fails loudly
-rather than querying the wrong thing.
+Reels return no `media_url` and every embed variant renders the full Instagram chrome, so an
+Instagram card shows the still and a watch button rather than an inline player.
+
+### Facebook — done
+
+Live. Both `FB_PAGE_ID` and `FB_PAGE_ACCESS_TOKEN` are required — setting one alone counts as
+unconfigured, deliberately, so a half-finished setup fails loudly rather than querying the wrong
+thing. It shares the Meta app and the token with Instagram.
 
 Use the **same Meta app as Instagram**, so do both in one sitting. You must be an admin of the
 Page. Grant `pages_read_engagement` and `pages_show_list`, then generate a **Page** access token,
@@ -194,6 +206,10 @@ Notes on what it returns:
   have no direct media URL to embed.
 - Orientation comes from the attachment's image dimensions.
 - The Page's follower count feeds the hero totals alongside YouTube's.
+- **Like and comment counts are missing.** They need `pages_read_user_content`, which the token does
+  not carry, and requesting them without it fails the whole request rather than those fields — so
+  the server asks once, falls back, and remembers. Granting the scope restores them with no code
+  change. Tracked in MRO-248.
 
 ### TikTok — built, needs post URLs
 
@@ -272,6 +288,8 @@ would be the real gate but needs a paid GitHub plan.
 
 ## Known gaps
 
+- **TikTok and X show sample content.** TikTok is built and needs only `TIKTOK_POST_URLS`
+  (MRO-240); X needs a paid API tier (MRO-242). Both are labelled `Sample` on the card.
 - **Facebook shows no like or comment counts.** Those fields need `pages_read_user_content`, which
   the Page token does not carry; requesting them without it fails the whole request, so the server
   falls back once and remembers.
