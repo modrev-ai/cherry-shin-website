@@ -20,6 +20,10 @@
 const DEFAULT_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const DEFAULT_MAX_STALE_MS = 24 * 60 * 60 * 1000; // serve stale for up to a day
 const DEFAULT_ERROR_BACKOFF_MS = 30 * 1000; // don't retry a failing upstream per-request
+// Ceiling on retained entries. Cursor-keyed pagination makes the key space
+// unbounded - every distinct cursor is its own key, and cursors shift as new
+// posts are published - so nothing else guarantees the store stops growing.
+const MAX_ENTRIES = 500;
 
 const store = new Map();
 const inFlight = new Map();
@@ -36,6 +40,38 @@ const stats = {
     staleServes: 0,
     suppressedRetries: 0,
 };
+
+// Nothing removed entries before this: they were overwritten or read, never
+// deleted. That was survivable when keys were `ig:media:12` and there were a
+// handful of them; cursor pagination made the key space unbounded.
+//
+// Expiry alone is not the right test - stale-on-error deliberately keeps an
+// expired copy for up to maxStaleMs so an outage degrades to slightly stale
+// content. An entry is only dead once it is older than that.
+//
+// Runs on a miss, not on every lookup: misses happen about once per TTL per
+// key, so the walk costs nothing in practice and a cache hit stays a plain map
+// lookup.
+function sweep(now) {
+    for (const [key, entry] of store) {
+        if (now - entry.storedAt > entry.maxStaleMs) store.delete(key);
+    }
+    for (const [key, failure] of failures) {
+        if (now >= failure.until) failures.delete(key);
+    }
+
+    // The caller is a miss that is about to insert one entry, so leave room for
+    // it - trimming to exactly MAX_ENTRIES here would settle at one over.
+    const room = MAX_ENTRIES - 1;
+    if (store.size <= room) return;
+
+    // Still over the ceiling. Drop oldest first - they are the closest to being
+    // useless for stale-on-error anyway.
+    const oldestFirst = [...store.entries()].sort((a, b) => a[1].storedAt - b[1].storedAt);
+    for (const [key] of oldestFirst.slice(0, store.size - room)) {
+        store.delete(key);
+    }
+}
 
 function describe(entry, ttlMs, source) {
     const ageMs = Date.now() - entry.storedAt;
@@ -87,13 +123,14 @@ export async function cached(key, producer, options = {}) {
     }
 
     stats.misses++;
+    sweep(Date.now());
 
     const refresh = (async () => {
         try {
             stats.upstreamCalls++;
             const value = await producer();
             const now = Date.now();
-            store.set(key, { value, storedAt: now, expiresAt: now + ttlMs });
+            store.set(key, { value, storedAt: now, expiresAt: now + ttlMs, maxStaleMs });
             failures.delete(key);
             return { value, state: 'fresh', source: 'upstream', ageMs: 0 };
         } catch (error) {
