@@ -379,52 +379,59 @@ export class BackendUnreachableError extends Error {
 // Both used to arrive as a missing cursor, and since a missing cursor is how
 // the walk records exhaustion, a single failed batch retired the platform for
 // the rest of the session.
+
+// A timeout aborts the exchange; which call rejects depends on how far it had
+// got, so the name is the only reliable signal.
+const isAbort = (err) => err?.name === 'TimeoutError' || err?.name === 'AbortError';
+
 async function fetchLive(path, label) {
-    let response;
     try {
-        response = await fetch(`${API_BASE}${path}`, {
+        const response = await fetch(`${API_BASE}${path}`, {
             signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
         });
+
+        if (!response.ok) {
+            // A dead backend usually surfaces as a 5xx from whatever proxy sits
+            // in front of it, not as a network error, so the status alone cannot
+            // tell the two apart. Our own error responses are JSON with an
+            // `error` key; a proxy's are not. Use that to distinguish "platform
+            // not configured" from "nothing is answering behind the proxy".
+            let body = null;
+            try {
+                body = await response.json();
+            } catch (err) {
+                if (isAbort(err)) throw err;
+                throw new BackendUnreachableError(new Error(`Bad gateway (${response.status})`));
+            }
+
+            if (!body || typeof body.error !== 'string') {
+                throw new BackendUnreachableError(new Error(`Unexpected response (${response.status})`));
+            }
+
+            console.warn(`${label} unavailable (${response.status}): ${body.error}`);
+            // The server flags a missing-credentials response explicitly.
+            // Anything else - an upstream 502, say - means the platform is set
+            // up and simply not answering right now.
+            return { ok: false, items: [], configured: body.configured !== false, next: null };
+        }
+
+        const data = await response.json();
+        return { ok: true, items: data.data || [], configured: true, next: data.paging?.next || null };
     } catch (err) {
-        // A timeout is this platform being slow, not the backend being gone, so
-        // it must not take the whole feed down with it. The server keeps working
-        // after we walk away and stores the result, so the retry on the next
-        // extension finds it cached - measured at 16ms against a request that
-        // had just been abandoned at 1.2s.
-        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        // The timeout can land anywhere in the exchange, not only on the fetch
+        // itself - aborting while the body is still being read rejects the
+        // json() call instead. Catching it around the whole exchange is what
+        // makes that safe; catching only the fetch let an AbortError escape and
+        // empty the entire feed, because the caller reads any unrecognised
+        // error as "no more content".
+        if (isAbort(err)) {
             console.warn(`${label} exceeded ${PLATFORM_TIMEOUT_MS}ms; it will be retried`);
             return { ok: false, items: [], configured: true, next: null };
         }
+        if (err instanceof BackendUnreachableError) throw err;
         // fetch otherwise rejects only on a network-level failure
         throw new BackendUnreachableError(err);
     }
-
-    if (!response.ok) {
-        // A dead backend usually surfaces as a 5xx from whatever proxy sits in
-        // front of it, not as a network error, so the status alone cannot tell
-        // the two apart. Our own error responses are JSON with an `error` key;
-        // a proxy's are not. Use that to distinguish "platform not configured"
-        // from "nothing is answering behind the proxy".
-        let body = null;
-        try {
-            body = await response.json();
-        } catch {
-            throw new BackendUnreachableError(new Error(`Bad gateway (${response.status})`));
-        }
-
-        if (!body || typeof body.error !== 'string') {
-            throw new BackendUnreachableError(new Error(`Unexpected response (${response.status})`));
-        }
-
-        console.warn(`${label} unavailable (${response.status}): ${body.error}`);
-        // The server flags a missing-credentials response explicitly. Anything
-        // else - an upstream 502, say - means the platform is set up and simply
-        // not answering right now.
-        return { ok: false, items: [], configured: body.configured !== false, next: null };
-    }
-
-    const data = await response.json();
-    return { ok: true, items: data.data || [], configured: true, next: data.paging?.next || null };
 }
 
 // The feed is a stream that is extended on demand, not a fixed pool sliced by
