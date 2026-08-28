@@ -34,13 +34,21 @@ jobs:
       - name: Build
         run: npm run build
 
-      # The server has no build step, so nothing else would catch a syntax
-      # error in it. Installing also verifies its lockfile is intact.
+      # Installing also verifies the server lockfile is intact.
       - name: Install server dependencies
         run: npm ci --prefix server
 
+      # The server has no build step, so nothing else would catch a syntax error
+      # in it. Recursive and .mjs-aware: the previous `server/*.js` glob silently
+      # skipped server/test/, so a broken test file reached main unparsed.
       - name: Check server syntax
         run: |
-          for file in server/*.js; do
+          find server -path server/node_modules -prune -o             \( -name '*.js' -o -name '*.mjs' \) -print |
+          while read -r file; do
             node --check "$file"
           done
+
+      # A test nobody runs rots. This one caught an off-by-one in the eviction
+      # it was written for, so it is worth failing the build over.
+      - name: Test server
+        run: npm test --prefix server
