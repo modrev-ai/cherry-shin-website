@@ -268,9 +268,6 @@ would be the real gate but needs a paid GitHub plan.
 
 ## Known gaps
 
-- **Unused files.** `src/components/MediaModal.jsx` and `src/hooks/useMediaFeed.js` are no longer
-  referenced — the modal was unwired when the watch button became a direct link. `src/App.css` and
-  the `react.svg`, `vite.svg` and `hero.png` assets are also unreferenced.
 - **Sample engagement numbers.** Placeholder posts carry invented view and like counts in the tens
   of thousands, which sit oddly beside a real channel of a different size.
 - **Instagram token refresh** is not implemented; long-lived tokens expire in ~60 days.

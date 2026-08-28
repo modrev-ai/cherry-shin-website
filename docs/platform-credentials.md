@@ -176,12 +176,60 @@ Instagram posts therefore show their still plus a watch button.
 
 ## TikTok
 
+Two routes, both implemented. The server prefers the Display API when its three
+variables are set and falls back to oEmbed otherwise; an `X-TikTok-Source` response header says
+which answered.
+
+### oEmbed route
+
 **No credentials at all.** TikTok's public oEmbed endpoint needs no key, no OAuth and no app
 review. The Display API would discover posts automatically but requires all three, and works only
 with the developer's own account until it passes review.
 
 The tradeoff: **oEmbed resolves one post at a time and cannot list a profile**, so the posts to
 mirror are named explicitly.
+
+### Display API route
+
+Client key and secret alone are not enough: they authenticate the *app*, not the account. Reading
+Cherry's videos needs a **refresh token**, which only comes from her authorising the app once.
+
+1. Create the app at **https://developers.tiktok.com**. Note the client key and secret. Sandbox and
+   production are separate apps with separate keys, redirect URIs and settings.
+2. Register the redirect URI on the app you intend to use:
+   `https://cherrystudio.art/tiktok/callback` — exact match, no trailing slash.
+3. **Sandbox only: add the account as a target user.** Sandbox apps authorise nobody by default.
+   Add `itscherryshin` under the sandbox's Target users, and have that account **accept the
+   invitation** — an unaccepted invite fails the same way as no invite at all.
+4. Open the authorisation URL signed in as that account:
+
+```
+https://www.tiktok.com/v2/auth/authorize/
+  ?client_key=CLIENT_KEY
+  &scope=user.info.basic,user.info.stats,video.list
+  &response_type=code
+  &redirect_uri=https://cherrystudio.art/tiktok/callback
+  &state=RANDOM
+```
+
+5. You land on `/tiktok/callback`, which shows the authorisation code masked, with copy and reveal
+   controls. It is masked because that page is filmed for the Login Kit part of the app review, and
+   a code should not appear in an uploaded video.
+6. Exchange the code **server-side** — it needs the client secret — for the refresh token, then set
+   `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` and `TIKTOK_REFRESH_TOKEN`.
+
+Codes are single-use and expire in about ten minutes.
+
+#### Errors and what they mean
+
+| Error | Cause |
+| --- | --- |
+| `non_sandbox_target` | The signed-in account is not a registered sandbox target, or the invitation was never accepted. Check which account the browser is signed into — the error is about that account, not the intended one. |
+| redirect mismatch | The URI in the request differs from the registered one, including trailing slash, or was registered on the other app (sandbox vs production). |
+| scope not authorised | A requested scope has not been approved for the app. |
+
+Production authorises any account with no target list, so once app review approves, the sandbox
+target dance is unnecessary.
 
 ### Getting the post URLs
 
