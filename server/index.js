@@ -6,11 +6,24 @@ import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import { cached, getStats, BudgetExceededError } from './cache.js';
 import { readLimit, readAfter } from './params.js';
+import { diagnosticsEnabled, diagnosticsGuard } from './diagnostics.js';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// True only when this file is the process entry point, which means a local
+// development server. On Vercel the app is imported by api/index.js instead.
+const isDirectRun = Boolean(process.argv[1]) && resolve(process.argv[1]) === resolve(__filename);
+
+// Local only. The reasoning, and the two separate holes this closes, are in
+// diagnostics.js beside the decision.
+const DIAGNOSTICS_ENABLED = diagnosticsEnabled({
+    entryPoint: process.argv[1],
+    moduleFile: __filename,
+    isServerless: Boolean(process.env.VERCEL),
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -760,6 +773,11 @@ app.get('/api/instagram/media', async (req, res) => {
     }
 });
 
+// Both diagnostics are gated here rather than inside each handler, so a route
+// added to this list cannot forget the check. Registered before them, because
+// express runs matching handlers in registration order.
+app.get(['/api/cache/stats', '/api/instagram/status'], diagnosticsGuard(DIAGNOSTICS_ENABLED));
+
 // Endpoint: refresh token info
 app.get('/api/instagram/status', async (req, res) => {
     try {
@@ -890,8 +908,6 @@ app.get('/api/cache/stats', (req, res) => {
 // Serverless platforms import the app and invoke it per request; only a direct
 // `node server/index.js` should bind a port. Keeping one implementation means
 // local dev and production cannot drift apart.
-const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(__filename);
-
 if (isDirectRun) {
     app.listen(PORT, () => {
         console.log(`API Server running on http://localhost:${PORT}`);
