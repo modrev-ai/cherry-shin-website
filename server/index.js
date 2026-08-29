@@ -9,6 +9,7 @@ import { readLimit, readAfter } from './params.js';
 import { diagnosticsEnabled, diagnosticsGuard } from './diagnostics.js';
 import { itemFromOEmbed, collectPosts } from './tiktok.js';
 import { isPlaceholderToken, instagramConfigured } from './credentials.js';
+import { collectStats, summariseStats, isTotalBlackout, sumField } from './stats.js';
 
 dotenv.config();
 
@@ -609,16 +610,6 @@ async function tiktokStats() {
 // Returns null when the platform is not set up, so it is never counted as an
 // attempt; `failed` marks one that was asked and could not answer, which is
 // what separates a partial outage from a total one.
-async function collectStats(name, configured, load) {
-    if (!configured) return null;
-    try {
-        return { name, stats: await load() };
-    } catch (error) {
-        console.warn(`${name} stats unavailable:`, error.message);
-        return { name, failed: true };
-    }
-}
-
 async function fetchAudienceStats() {
     const collected = await Promise.all([
         collectStats(
@@ -631,35 +622,17 @@ async function fetchAudienceStats() {
         collectStats('tiktok', isTikTokApiConfigured(), tiktokStats),
     ]);
 
-    const platforms = {};
-    let asked = 0;
-    let failed = 0;
+    const { platforms, asked, failed } = summariseStats(collected);
 
-    for (const result of collected) {
-        if (!result) continue;
-        asked += 1;
-        if (result.failed) {
-            failed += 1;
-        } else if (result.stats) {
-            platforms[result.name] = result.stats;
-        }
-    }
-
-    // Only a total blackout is an error worth a 502. A platform that answered
-    // without usable numbers is not a failure, just a platform with nothing to
-    // report, and it leaves the others untouched.
-    if (asked > 0 && failed === asked) {
+    // The isolation, the blackout rule and the null-not-zero rule all live in
+    // stats.js beside the incidents that produced them.
+    if (isTotalBlackout({ asked, failed })) {
         const error = new Error('Every configured platform failed to report stats');
         error.isUpstream = true;
         throw error;
     }
 
-    const sum = (field) => {
-        const values = Object.values(platforms)
-            .map(p => p[field])
-            .filter(v => typeof v === 'number');
-        return values.length ? values.reduce((a, b) => a + b, 0) : null;
-    };
+    const sum = (field) => sumField(platforms, field);
 
     return {
         totals: {
