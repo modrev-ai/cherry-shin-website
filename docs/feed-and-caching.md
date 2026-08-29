@@ -192,6 +192,41 @@ to avoid.
 
 ---
 
+## What a failure status actually means
+
+The media routes distinguish two failures that used to answer identically, because they
+have different owners (MRO-338):
+
+| Response | Means | Who acts |
+| --- | --- | --- |
+| **400** `"<Platform> rejected the request"` | Upstream refused what we asked for. On these routes the only caller-controlled input is `?after=`, so in practice it is a cursor the platform did not issue | The caller. Retry without `?after=` |
+| **502** `"<Platform> API error"`, no hint | We could not reach upstream, or it failed on its own account | Nobody, immediately. It is an outage |
+| **502** with a token hint | Upstream answered 401 or 403 | Rotate the credential — and **only** this response says so |
+
+`server/upstream.js` decides which, from the HTTP status upstream returned. Upstream's own
+`message` and `code` are passed through untouched; nothing else is asserted about the cause.
+
+**The 502-with-a-hint used to be the answer to everything**, including a mistyped cursor. That
+mattered because following it means rotating a working Meta credential across `server/.env`,
+Vercel and the vault — a real operation performed for nothing.
+
+### Instagram is the exception, and it is upstream's doing
+
+Facebook and Instagram are the same Graph API and disagree. Measured on production:
+
+```
+/api/facebook/posts    bad cursor -> 400  "(#100) Invalid cursor: ..."   code 100
+/api/instagram/media   bad cursor -> 502  "An unknown error has occurred."   no code
+```
+
+Instagram's `/media` edge sends **neither a 4xx status nor an error code** for this failure, so
+there is nothing to classify on. Guessing from the message string would be an invented verdict —
+that same generic wording also arrives for real transient Graph failures — so it falls through to
+the conservative 502. **No change is needed if Meta ever starts sending a status or a code: the
+classifier already handles both.**
+
+---
+
 ## Which tests hold which claim
 
 Run everything with `npm test` at the repo root.
@@ -201,6 +236,7 @@ Run everything with `npm test` at the repo root.
 | `src/services/mediaApi.test.mjs` | the walk: page shape, cursor advance, failure backoff, sample rules, cycling without stutter, serialisation |
 | `server/test/cache.test.mjs` | TTL, coalescing, stale-on-error, backoff, the 500-entry cap, the fill budget |
 | `server/test/params.test.mjs` | the clamp and cursor rejection table above |
+| `server/test/upstream.test.mjs` | which upstream failures are refusals and which are outages, and that only an auth failure blames the token |
 | `scripts/scan-secrets.test.mjs` | that the credential scanner catches real shapes and stays quiet on placeholders |
 
 The feed suite pins one regression by name: an `AbortError` raised inside `response.json()`
