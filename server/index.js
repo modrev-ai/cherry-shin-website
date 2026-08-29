@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { corsOptionsFor } from './origins.js';
 import dotenv from 'dotenv';
 import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
@@ -323,7 +324,10 @@ const TIKTOK_POST_URLS = (process.env.TIKTOK_POST_URLS || '')
     .map(url => url.trim())
     .filter(url => url.startsWith('http'));
 
-app.use(cors());
+// Same-origin only unless a deployment names the origins it needs. The site
+// fetches `/api` relatively, so it needs no CORS header at all; a wildcard
+// only ever granted access to callers we do not have. See MRO-342.
+app.use(cors(corsOptionsFor(process.env.ALLOWED_ORIGINS)));
 app.use(express.json());
 
 // Helper: load cached token
