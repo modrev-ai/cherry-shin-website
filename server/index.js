@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import { cached, getStats, BudgetExceededError } from './cache.js';
 import { readLimit, readAfter } from './params.js';
-import { classifyUpstream, describeUpstreamFailure } from './upstream.js';
+import { classifyUpstream, describeUpstreamFailure, withUpstreamCode } from './upstream.js';
 import { diagnosticsEnabled, diagnosticsGuard } from './diagnostics.js';
 import { itemFromOEmbed, collectPosts } from './tiktok.js';
 import { isPlaceholderToken, instagramConfigured } from './credentials.js';
@@ -171,6 +171,7 @@ async function fetchFacebookPosts({ limit = 12, after = null } = {}) {
     if (data.error) {
         const err = new Error(data.error.message);
         err.isUpstream = true;
+        err.upstreamCode = data.error?.code;
         err.status = reply.status;
         throw err;
     }
@@ -218,6 +219,7 @@ async function tiktokAccessToken() {
     if (!data.access_token) {
         const err = new Error(data.error_description || data.error || 'TikTok token refresh failed');
         err.isUpstream = true;
+        err.upstreamCode = data.error?.code;
         err.status = response.status;
         throw err;
     }
@@ -275,6 +277,7 @@ async function fetchTikTokVideos({ limit = 12 } = {}) {
     if (data.error && data.error.code && data.error.code !== 'ok') {
         const err = new Error(data.error.message || data.error.code);
         err.isUpstream = true;
+        err.upstreamCode = data.error?.code;
         err.status = response.status;
         throw err;
     }
@@ -402,6 +405,7 @@ async function fetchInstagramMedia(token, { limit = 12, after = null } = {}) {
     if (data.error) {
         const err = new Error(data.error.message);
         err.isUpstream = true;
+        err.upstreamCode = data.error?.code;
         err.status = response.status;
         throw err;
     }
@@ -435,6 +439,7 @@ async function ytGet(path, params, { signal } = {}) {
     if (data.error) {
         const err = new Error(data.error.message);
         err.isUpstream = true;
+        err.upstreamCode = data.error?.code;
         err.status = response.status;
         throw err;
     }
@@ -711,7 +716,7 @@ app.get('/api/instagram/media', async (req, res) => {
         if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'Instagram');
         const { status, kind } = classifyUpstream(error);
         console.error(`Error fetching Instagram media (${kind}):`, error.message);
-        return res.status(status).json(describeUpstreamFailure('Instagram', kind, error.message));
+        return res.status(status).json(withUpstreamCode(describeUpstreamFailure('Instagram', kind, error.message), error));
     }
 });
 
@@ -768,7 +773,7 @@ app.get('/api/youtube/videos', async (req, res) => {
         if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'YouTube');
         console.error('Error fetching YouTube videos:', error.message);
         const { status, kind } = classifyUpstream(error);
-        return res.status(status).json(describeUpstreamFailure('YouTube', kind, error.message));
+        return res.status(status).json(withUpstreamCode(describeUpstreamFailure('YouTube', kind, error.message), error));
     }
 });
 
@@ -795,7 +800,7 @@ app.get('/api/facebook/posts', async (req, res) => {
         if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'Facebook');
         console.error('Error fetching Facebook posts:', error.message);
         const { status, kind } = classifyUpstream(error);
-        return res.status(status).json(describeUpstreamFailure('Facebook', kind, error.message));
+        return res.status(status).json(withUpstreamCode(describeUpstreamFailure('Facebook', kind, error.message), error));
     }
 });
 

@@ -11,7 +11,7 @@
 // still be a 502. A classifier that answered 400 to everything would satisfy
 // the headline case and silently break the one the site actually depends on.
 
-import { classifyUpstream, describeUpstreamFailure } from '../upstream.js';
+import { classifyUpstream, describeUpstreamFailure, withUpstreamCode } from '../upstream.js';
 
 const fail = [];
 const check = (name, ok, detail = '') => {
@@ -80,6 +80,28 @@ check('the platform name reaches the body',
     safely(() => describeUpstreamFailure('Facebook', 'rejected', 'x')).error === 'Facebook rejected the request');
 check('the upstream message is passed through rather than replaced',
     safely(() => describeUpstreamFailure('Facebook', 'unreachable', 'the real words')).message === 'the real words');
+
+// --- upstream's own code, passed through rather than invented ---------------
+
+check("a body gains upstream's code when there is one",
+    safely(() => withUpstreamCode({ error: 'x' }, { upstreamCode: 100 })).code === 100);
+// Asserting `.code === undefined` here would NOT discriminate: spreading an
+// absent value gives `{ code: undefined }`, whose key JSON.stringify drops, so
+// the response is identical either way and the check can never fail. Mutation
+// testing caught exactly that. What matters is that the key is genuinely not
+// there, so that is what is asserted.
+check('and the key is absent entirely when upstream sent no code',
+    !('code' in safely(() => withUpstreamCode({ error: 'x' }, new Error('no code')))),
+    'a present-but-undefined key is a different object, even if it serialises the same today');
+check('a null code is dropped too, because null would render as a code of its own',
+    !('code' in safely(() => withUpstreamCode({ error: 'x' }, { upstreamCode: null }))),
+    JSON.stringify(safely(() => withUpstreamCode({ error: 'x' }, { upstreamCode: null }))));
+check('code 0 survives, because 0 is a code and not an absence',
+    safely(() => withUpstreamCode({ error: 'x' }, { upstreamCode: 0 })).code === 0);
+check('the original body is not mutated',
+    (() => { const b = { error: 'x' }; withUpstreamCode(b, { upstreamCode: 1 }); return b.code === undefined; })());
+check('a null error does not throw',
+    safely(() => withUpstreamCode({ error: 'x' }, null)).error === 'x');
 
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');
 process.exit(fail.length ? 1 : 0);

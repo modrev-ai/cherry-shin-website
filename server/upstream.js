@@ -61,3 +61,14 @@ export function describeUpstreamFailure(platform, kind, message) {
     // and inventing a cause is the defect this module exists for.
     return { error: `${platform} API error`, message };
 }
+
+// Upstream's own error code, passed through the same way its message already
+// is. The routes were discarding the single most useful field for diagnosis:
+// Instagram answers a bad cursor with "An unknown error has occurred." and a
+// code, and only the code says which failure it was. Surfacing what upstream
+// told us is the opposite of inventing a cause - see MRO-338.
+export function withUpstreamCode(body, error) {
+    const code = error?.upstreamCode;
+    if (code === undefined || code === null) return body;
+    return { ...body, code };
+}
