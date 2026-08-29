@@ -23,7 +23,7 @@ Nothing here contains a secret. Real values live in three places only:
 | Instagram | Live | `IG_ACCESS_TOKEN`, `IG_USER_ID` |
 | Facebook | Live | `FB_PAGE_ID`, `FB_PAGE_ACCESS_TOKEN` |
 | TikTok | Needs post URLs | `TIKTOK_POST_URLS` |
-| X | Not connected | needs a paid API tier |
+| X | Not connected | a decision (MRO-242): ~$3/month of usage credits, or drop |
 
 A platform with no credentials falls back to sample content for that platform alone, so the feed
 never breaks because something is unset. A sample is labelled `Sample` on the card and shows no
@@ -266,9 +266,20 @@ cards show neither rather than inventing them.
 
 ## X
 
-Reading a user timeline is **not available on the free tier**, which is write-oriented. The options
-are to pay for a tier that allows it, leave X on sample content, or drop the platform. Nothing to
-configure until that is decided.
+Reading a user timeline is **not available on the free tier**, which is write-oriented.
+
+This is no longer a subscription question. X closed its legacy tiers to new signups and moved to
+pay-per-usage credits. Reading *our own* account is an Owned Read at **$0.001 per post**, so the
+cost is a function of how often we refresh:
+
+| X cache TTL | Cost/month |
+| --- | --- |
+| 10 min (today's default) | ~$108 |
+| 6 hours | **~$3** |
+| 24 hours | ~$0.75 |
+
+So the real choice is buy credits at roughly $3/month, or drop the platform — see MRO-242, where
+the working and the unverified assumptions are recorded. Nothing to configure until that is decided.
 
 ---
 

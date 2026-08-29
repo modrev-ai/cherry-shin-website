@@ -14,7 +14,7 @@ A full-screen reel feed that mirrors Cherry Shin's posts from several social pla
 | Instagram | **Live** | already configured |
 | Facebook | **Live** | like and comment counts need `pages_read_user_content` (MRO-248) |
 | TikTok | Built, sample content | `TIKTOK_POST_URLS` for oEmbed, or `TIKTOK_CLIENT_*` for the Display API |
-| X | Sample content | paid API tier |
+| X | Sample content | a decision, not a blocker — MRO-242: ~$3/month of usage credits, or drop it |
 
 Any platform without credentials falls back to sample content for that platform only, so the feed
 never breaks because a platform is unconfigured. A sample is labelled `Sample` on the card and
@@ -341,7 +341,10 @@ scanner — 79 assertions in total.
 ## Known gaps
 
 - **TikTok and X show sample content.** TikTok is built and needs only `TIKTOK_POST_URLS`
-  (MRO-240); X needs a paid API tier (MRO-242). Both are labelled `Sample` on the card.
+  (MRO-240); X needs a decision (MRO-242). Both are labelled `Sample` on the card.
+  X closed its legacy tiers to new signups and now bills pay-per-usage, so this is not a
+  subscription: reading our own account costs $0.001 per post, which is roughly **$3/month**
+  at a 6-hour cache TTL. The choice is buy credits or drop the platform.
 - **Facebook shows no like or comment counts.** Those fields need `pages_read_user_content`, which
   the Page token does not carry; requesting them without it fails the whole request, so the server
   falls back once and remembers.
