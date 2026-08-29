@@ -111,16 +111,27 @@ api/index.js                  Vercel entry point; delegates to the Express app
 | `GET /api/instagram/media?limit=&after=` | recent media |
 | `GET /api/facebook/posts?limit=&after=` | Page posts, with embeddability probed per post |
 | `GET /api/tiktok/posts?limit=` | oEmbed for the configured post URLs; no cursor, the list is fixed |
-| `GET /api/instagram/status` | token validity |
+| `GET /api/instagram/status` | token validity — **local only**, 404 in production |
 | `GET /api/stats` | audience totals aggregated across configured platforms |
-| `GET /api/cache/stats` | hit rate and upstream call counts |
+| `GET /api/cache/stats` | hit rate and upstream call counts — **local only**, 404 in production |
 
 `after` is the cursor from the previous response's `paging.next`; its absence means the platform
 has nothing more. Every platform is normalised to that one shape.
 
-`instagram/status` and `cache/stats` are operator diagnostics rather than feed endpoints — the
-first answers whether the token is still valid, the second reports hit rate, coalescing and
-upstream call counts. Neither is called by the frontend, and both are meant to be.
+`instagram/status` and `cache/stats` are operator diagnostics rather than feed endpoints, and
+they are **served only when the server is run directly**. In production the app is imported by
+`api/index.js`, so both return 404. Neither is called by the frontend.
+
+They were public until MRO-303. Two different problems: the cache view answered "is my
+cache-busting landing, and is the fill budget spent" to anyone who asked — the feedback loop for
+the quota attack bounded in MRO-285 — and `instagram/status` calls Meta on every request without
+going through the cache at all, so neither the TTL nor the fill budget applied to it.
+
+Gated on the environment rather than a shared secret, so there is no fourth credential to keep in
+three places, and no gate that fails open the day a variable is unset. Little is lost: cache state
+is per-instance, so the production numbers only ever described whichever instance answered, and a
+cold one reported all zeros. The honest per-request view is still public in the `X-Cache`,
+`X-Vercel-Cache` and `Age` headers.
 
 `limit` is clamped to 1–50 and `after` is validated by charset and length (400 otherwise). Both
 values form part of the cache key, and a key that misses is a real upstream call — unclamped, a
