@@ -114,6 +114,49 @@ repeat traffic, which is why it matters less in practice than the caveat alone s
 
 ---
 
+## No media byte is ours
+
+Every thumbnail in the feed is fetched by the browser **directly from the platform's own CDN**.
+Nothing is proxied, mirrored or re-hosted: the API returns the `thumbnail_url` / `media_url` /
+`cover_image_url` the platform gave us, and the browser goes and gets it.
+
+On Meta's platforms those URLs are **signed and expire**. Measured on production, 2026-08-29:
+
+| Endpoint | Thumbnail host | Signed | Lifetime at issue |
+| --- | --- | --- | --- |
+| `/api/instagram/media` | `scontent-iad*.cdninstagram.com` | yes, `oh` + `oe` | ~105 h |
+| `/api/facebook/posts` | `scontent-iad*.xx.fbcdn.net` | yes, `oh` + `oe` | ~105 h |
+| `/api/youtube/videos` | `i.ytimg.com` | no | stable |
+
+`oe` is the expiry, a hex Unix timestamp. TikTok is on sample content and has no live URLs to
+measure.
+
+### Two things quietly depend on this
+
+**The stale window is only safe because it is shorter than the signature.** Stale-on-error serves
+a cached copy for up to 24 hours, and a cached payload holds URLs signed when it was filled — so
+the oldest URL we would ever hand out still has roughly 81 hours of signature left. That is about
+a 4x margin, and it is a property of Meta's current signature lifetime rather than anything we
+control or asserted. `maxStaleMs` must stay below the shortest upstream signature lifetime.
+
+**The hosting assessment on MRO-243 rests on it too.** Cloudflare's free tier reserves the right
+to limit an account serving a disproportionate share of pictures, and requires a paid product for
+video. That does not apply here only because we serve the HTML bundle, the JS and small JSON
+responses — and no image bytes at all.
+
+### What would make this page wrong
+
+Proxying or caching media through `/api`. It is a reasonable-sounding change — platform URLs do
+expire, so caching them locally looks like a robustness win — and it would silently invalidate
+both of the above at once.
+
+The failure mode if the stale window ever outlived the signature is the quiet kind this document
+keeps cataloguing: the API answers 200 with a complete, entirely correct payload whose image URLs
+are simply dead. Nothing in the cache, the API or `/api/cache/stats` sees a problem, because from
+their side there is not one. It renders as broken thumbnails, which reads as a client bug.
+
+---
+
 ## Why any of this needs guarding
 
 Both caller-supplied parameters end up in the cache key:

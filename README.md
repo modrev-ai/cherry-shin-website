@@ -147,7 +147,7 @@ above before trusting `X-Cache` on production.
 
 | Document | Covers |
 | --- | --- |
-| [docs/feed-and-caching.md](docs/feed-and-caching.md) | How a page of the feed is assembled, the two cache layers and why `X-Cache` misleads, the quota guardrails, and which test holds which claim |
+| [docs/feed-and-caching.md](docs/feed-and-caching.md) | How a page of the feed is assembled, the two cache layers and why `X-Cache` misleads, the quota guardrails, why no media byte is served from our origin, and which test holds which claim |
 | [docs/platform-credentials.md](docs/platform-credentials.md) | Every platform's setup, what each variable is for, where secrets live and how to rotate them |
 
 ## Local development

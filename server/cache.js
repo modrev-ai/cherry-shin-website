@@ -18,7 +18,13 @@
 //                  than a broken feed.
 
 const DEFAULT_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const DEFAULT_MAX_STALE_MS = 24 * 60 * 60 * 1000; // serve stale for up to a day
+// Serve stale for up to a day. This ceiling is not arbitrary: a cached payload
+// holds media URLs signed at fill time, and Meta's are signed for about 105
+// hours, so the oldest URL we would ever hand out still has ~81 hours left.
+// Keep this BELOW the shortest upstream signature lifetime. Exceeding it fails
+// silently - a complete, correct-looking 200 whose image URLs are all dead.
+// See docs/feed-and-caching.md, "No media byte is ours" (MRO-317).
+const DEFAULT_MAX_STALE_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_ERROR_BACKOFF_MS = 30 * 1000; // don't retry a failing upstream per-request
 // Ceiling on retained entries. Cursor-keyed pagination makes the key space
 // unbounded - every distinct cursor is its own key, and cursors shift as new
