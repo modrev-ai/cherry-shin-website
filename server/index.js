@@ -7,6 +7,7 @@ import { dirname, join, resolve } from 'path';
 import { cached, getStats, BudgetExceededError } from './cache.js';
 import { readLimit, readAfter } from './params.js';
 import { diagnosticsEnabled, diagnosticsGuard } from './diagnostics.js';
+import { itemFromOEmbed, collectPosts } from './tiktok.js';
 
 dotenv.config();
 
@@ -524,49 +525,21 @@ async function fetchYouTubeVideos({ limit = 12, after = null } = {}) {
     return { data: items, paging: playlist.nextPageToken ? { next: playlist.nextPageToken } : null };
 }
 
-// oEmbed carries no engagement figures and no publish date, so those fields are
-// left unset rather than invented. A post that fails to resolve is dropped
-// instead of failing the whole feed: a deleted or private video should cost one
-// card, not all of them.
+// The fetch. Everything worth testing about the response lives in tiktok.js;
+// this is the I/O around it, which is why it is the part with no unit test.
 async function fetchTikTokPost(postUrl) {
     const response = await fetch(`${TIKTOK_OEMBED}?url=${encodeURIComponent(postUrl)}`, {
         signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return null;
 
-    const data = await response.json();
-    const videoId = data.embed_product_id;
-    if (!videoId) return null;
-
-    // The html oEmbed returns is a blockquote plus TikTok's widget script, which
-    // will not work inside the feed's iframe player. The embed view will.
-    const width = Number(data.thumbnail_width) || 0;
-    const height = Number(data.thumbnail_height) || 0;
-
-    return {
-        id: videoId,
-        platform: 'tiktok',
-        title: data.title || 'TikTok post',
-        thumbnail: data.thumbnail_url || null,
-        embedUrl: `https://www.tiktok.com/embed/v2/${videoId}`,
-        date: '',
-        likes: null,
-        views: null,
-        comments: null,
-        orientation: width && height && width > height ? 'landscape' : 'portrait',
-        url: postUrl,
-    };
+    return itemFromOEmbed(await response.json(), postUrl);
 }
 
 async function fetchTikTokPosts({ limit = 12 } = {}) {
     const wanted = TIKTOK_POST_URLS.slice(0, limit);
-    const settled = await Promise.allSettled(wanted.map(fetchTikTokPost));
+    const { items, dropped } = await collectPosts(wanted, fetchTikTokPost);
 
-    const items = settled
-        .filter(result => result.status === 'fulfilled' && result.value)
-        .map(result => result.value);
-
-    const dropped = wanted.length - items.length;
     if (dropped > 0) {
         console.warn(`TikTok: ${dropped} of ${wanted.length} posts could not be resolved`);
     }
