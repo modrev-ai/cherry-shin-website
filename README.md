@@ -311,11 +311,24 @@ which left `www` serving a mismatched certificate and failing every handshake.
 
 ### Plan constraints worth knowing
 
-The Vercel team is on the **Hobby** plan, whose terms prohibit commercial use. The repo is public
+The Vercel team is on the **Hobby** plan, which restricts commercial use. The repo is public
 because Hobby does not support Git integration for a private organisation repo — that restriction
-also left several builds stuck in a `BLOCKED` state with no logs. Upgrading to Pro would allow a
-private repo and resolve the commercial-use question; Cloudflare Pages is the free alternative
-without either restriction.
+also left several builds stuck in a `BLOCKED` state with no logs.
+
+How much the commercial-use clause actually bites is narrower than it sounds: Vercel's own fair-use
+examples are taking payment from visitors and carrying advertisements, and this site does neither.
+What remains is a broad clause about financial gain by anyone involved in producing the project,
+which is a judgement rather than a bright line.
+
+The two ways out are not equivalent, and the difference is DNS rather than money:
+
+| | Cost | What moves |
+| --- | --- | --- |
+| **Vercel Pro** | $20 per developer seat/month | Nothing. No DNS change, no certificate re-issue |
+| **Cloudflare Pages** | Free, and no non-commercial restriction | The **whole zone**. The site is served at the apex, and an apex custom domain requires the domain to be a Cloudflare zone — so every record is re-created, `google._domainkey` included |
+
+So it is $20/month against a mandatory nameserver migration whose first casualty, done carelessly,
+is email signing. Undecided — see MRO-243, where both options are costed.
 
 ## CI and hooks
 
