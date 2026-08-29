@@ -8,6 +8,7 @@ import { cached, getStats, BudgetExceededError } from './cache.js';
 import { readLimit, readAfter } from './params.js';
 import { diagnosticsEnabled, diagnosticsGuard } from './diagnostics.js';
 import { itemFromOEmbed, collectPosts } from './tiktok.js';
+import { isPlaceholderToken, instagramConfigured } from './credentials.js';
 
 dotenv.config();
 
@@ -32,25 +33,13 @@ const PORT = process.env.PORT || 3001;
 // Instagram Graph API config
 const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
 
-// The shipped .env template uses a placeholder value. Treat it as unset so we
-// report "not configured" instead of sending a bogus token to the Graph API.
-//
-// Every "not configured" response carries `configured: false`. That is a
-// contract the client depends on: it falls back to sample content only for a
-// platform that has no credentials at all. A platform that is configured but
-// whose upstream is failing answers 502 without the flag, and contributes
-// nothing rather than being papered over with invented posts.
-const isPlaceholderToken = (t) => !t || /^your_.*_here$/.test(t.trim());
-// No fallback on purpose. This used to default to a hardcoded account id left
-// over from the original code, which meant that setting a token without also
-// setting the id would have quietly fetched a stranger's posts and presented
-// them as Cherry's, rather than failing.
+// No fallback on purpose, and the reason is in credentials.js beside the
+// predicate that enforces it: a default id would mean a token set without an id
+// quietly fetched a stranger's posts and presented them as Cherry's.
 const IG_USER_ID = process.env.IG_USER_ID;
 
-// Instagram needs both halves: a token alone identifies who is asking, not
-// whose media to read.
 const isInstagramConfigured = () =>
-    !isPlaceholderToken(IG_ACCESS_TOKEN) && !isPlaceholderToken(IG_USER_ID);
+    instagramConfigured({ token: IG_ACCESS_TOKEN, userId: IG_USER_ID });
 
 // Token cache file
 const TOKEN_CACHE_FILE = join(__dirname, 'token_cache.json');
