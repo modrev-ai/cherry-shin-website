@@ -151,23 +151,27 @@ async function fetchFacebookPosts({ limit = 12, after = null } = {}) {
             + (after ? `&after=${encodeURIComponent(after)}` : '')
             + `&access_token=${FB_PAGE_ACCESS_TOKEN}`;
         const response = await fetch(url);
-        return response.json();
+        // The status has to come back out with the body: `response` is scoped
+        // to this helper, and the throw that needs it is in the caller.
+        return { status: response.status, data: await response.json() };
     };
 
-    let data = await request(fbEngagementAllowed ? FB_FIELDS_WITH_COUNTS : FB_FIELDS_BASE);
+    let reply = await request(fbEngagementAllowed ? FB_FIELDS_WITH_COUNTS : FB_FIELDS_BASE);
 
     // Code 10 is the permission refusal. Retry without the engagement summaries
     // rather than losing the whole feed over them.
-    if (data.error?.code === 10 && fbEngagementAllowed) {
+    if (reply.data.error?.code === 10 && fbEngagementAllowed) {
         console.warn('Facebook: like and comment counts need pages_read_user_content; continuing without them');
         fbEngagementAllowed = false;
-        data = await request(FB_FIELDS_BASE);
+        reply = await request(FB_FIELDS_BASE);
     }
+
+    const data = reply.data;
 
     if (data.error) {
         const err = new Error(data.error.message);
         err.isUpstream = true;
-        err.status = response.status;
+        err.status = reply.status;
         throw err;
     }
 
