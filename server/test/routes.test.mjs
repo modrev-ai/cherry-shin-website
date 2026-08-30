@@ -188,6 +188,57 @@ function stubUpstream(payload, status = 400) {
     await app.close();
 }
 
+// 5. The display_name scope fallback. `tiktokStats` had no coverage at all, and
+//    the path most worth covering is the one that only runs when something is
+//    wrong: a token without `user.info.basic` fails the WHOLE user/info request,
+//    and tiktokStats returning null is skipped by summariseStats WITHOUT counting
+//    as a failure — so a refusal would delete TikTok from /api/stats silently.
+//
+//    A sequenced stub rather than stubUpstream's fixed one, because the whole
+//    claim is that the SECOND call differs from the first. The url log is the
+//    positive control: asserting `followers === 12` alone would pass if the
+//    retry never happened and the first call had simply succeeded.
+{
+    const seen = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+        const href = String(url);
+        if (href.includes('127.0.0.1')) return realFetch(url, init);
+        seen.push(href);
+
+        if (href.includes('/oauth/token/')) {
+            return { ok: true, status: 200, json: async () => ({ access_token: 'stub-access', expires_in: 86400 }) };
+        }
+        // The refusal: a request carrying display_name comes back with no user.
+        if (href.includes('display_name')) {
+            return { ok: false, status: 401, json: async () => ({ error: { code: 'scope_not_authorized', message: 'stubbed refusal' } }) };
+        }
+        return {
+            ok: true, status: 200,
+            json: async () => ({ data: { user: { follower_count: 12, video_count: 3, likes_count: 40 } }, error: { code: 'ok' } }),
+        };
+    };
+
+    const app = await startApp({
+        TIKTOK_CLIENT_KEY: 'ttkey', TIKTOK_CLIENT_SECRET: 'ttsecret', TIKTOK_REFRESH_TOKEN: 'ttrefresh',
+    });
+    const body = await (await realFetch(`${app.base}/api/stats`)).json();
+
+    const infoCalls = seen.filter(u => u.includes('/user/info/'));
+    check('the retry actually fired — two user/info calls, not one',
+        infoCalls.length === 2, `calls: ${JSON.stringify(infoCalls)}`);
+    check('the first asked for display_name and the second did not',
+        infoCalls.length === 2 && infoCalls[0].includes('display_name') && !infoCalls[1].includes('display_name'),
+        JSON.stringify(infoCalls));
+    check('the counts survived the refusal — TikTok is still in /api/stats',
+        body.platforms?.tiktok?.followers === 12, JSON.stringify(body.platforms || {}).slice(0, 160));
+    check('and TikTok did not silently vanish from connected',
+        Array.isArray(body.connected) && body.connected.includes('tiktok'), JSON.stringify(body.connected));
+
+    globalThis.fetch = realFetch;
+    await app.close();
+}
+
 loud();
 console.log = realLog;
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');

@@ -611,14 +611,65 @@ async function facebookStats() {
     };
 }
 
+// The refresh token authorises exactly one account and carries no indication of
+// which. That was self-correcting while one account was a sandbox target: signing
+// in as any other failed with `non_sandbox_target`. With a second target user
+// added, the wrong choice now SUCCEEDS and publishes the wrong account's videos,
+// so the only remaining check is asking the API who it thinks we are.
+//
+// Requested as a separate field set with a fallback, on the Facebook pattern
+// above: `display_name` needs `user.info.basic`, and a token missing that scope
+// fails the WHOLE request rather than omitting the field. Losing the follower
+// counts to a diagnostic would be worse than not having the diagnostic — and it
+// would fail silently, because tiktokStats returning null is skipped by
+// summariseStats without counting as a failure.
+const TIKTOK_USER_FIELDS = 'follower_count,video_count,likes_count';
+let tiktokNameAllowed = true;
+let tiktokAccountLogged = false;
+
 async function tiktokStats() {
     const token = await tiktokAccessToken();
-    const response = await fetch(
-        `${TIKTOK_API}/user/info/?fields=follower_count,video_count,likes_count`,
+    const ask = (fields) => fetch(
+        `${TIKTOK_API}/user/info/?fields=${fields}`,
         { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(STATS_TIMEOUT_MS) },
-    );
-    const user = (await response.json()).data?.user;
+    ).then(r => r.json());
+
+    let body = await ask(tiktokNameAllowed ? `display_name,${TIKTOK_USER_FIELDS}` : TIKTOK_USER_FIELDS);
+
+    // Retry without the name rather than losing the counts over it — but latch
+    // on the RESULT of the retry, not on the first failure. `!data.user` is
+    // equally true for an expired refresh token, a 5xx and a rate limit, and
+    // latching on that would disable the identity check for the life of the
+    // process over a transient, while blaming a scope that is fine.
+    //
+    // The retry is the discriminator: if dropping the field fixes it, the field
+    // was the problem. That is a comparison rather than a guess at an error
+    // string, which matters because TikTok's refusal code for this is not
+    // verified anywhere in this repo.
+    if (!body.data?.user && tiktokNameAllowed) {
+        const code = body.error?.code;
+        const retry = await ask(TIKTOK_USER_FIELDS);
+
+        if (retry.data?.user) {
+            tiktokNameAllowed = false;
+            console.warn(`TikTok refused display_name (${code || 'no code'}); counts retained, connected account cannot be identified. Check that user.info.basic is granted.`);
+        } else {
+            // Both failed, so the name was not the cause. Do not latch: the
+            // identity check must come back when whatever this is clears.
+            console.warn(`TikTok user/info failed (${code || 'no code'}); not a display_name problem.`);
+        }
+        body = retry;
+    }
+
+    const user = body.data?.user;
     if (!user) return null;
+
+    // Once per process, where our user is already looking during the OAuth flow.
+    if (!tiktokAccountLogged && user.display_name) {
+        tiktokAccountLogged = true;
+        console.warn(`TikTok Display API connected as: ${user.display_name}`);
+    }
+
     return {
         followers: Number(user.follower_count) || 0,
         posts: Number(user.video_count) || 0,
