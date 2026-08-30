@@ -199,13 +199,43 @@ have different owners (MRO-338):
 
 | Response | Means | Who acts |
 | --- | --- | --- |
-| **400** `"<Platform> rejected the request"` | Upstream refused what we asked for. On these routes the only caller-controlled input is `?after=`, so in practice it is a cursor the platform did not issue | The caller. Retry without `?after=` |
+| **400** `"<Platform> rejected the request"` | Upstream refused what we asked for. The cursor hint is attached **only if the request actually sent `?after=`** | The caller. Retry without `?after=` |
 | **502** `"<Platform> API error"`, no hint | We could not reach upstream, or it failed on its own account | Nobody, immediately. It is an outage |
-| **502** with a token hint | Upstream answered 401 or 403 | Rotate the credential — and **only** this response says so |
+| **502** with a token hint | Upstream answered 401 or 403, **or named a token failure in its own error code** | Rotate the credential — and **only** this response says so |
 | **200** `{"configured": false}` | The platform has no credentials. Not a failure at all | Nobody. Set them whenever you want that platform live |
 
-`server/upstream.js` decides which, from the HTTP status upstream returned. Upstream's own
-`message` and `code` are passed through untouched; nothing else is asserted about the cause.
+`server/upstream.js` decides which, from the HTTP status **and** upstream's own error code.
+Upstream's `message` and `code` are passed through untouched; nothing else is asserted about the
+cause.
+
+### Meta never sends 401 or 403, so the status alone is not enough
+
+Measured against the Graph API directly:
+
+```
+access_token=junk           -> HTTP 400  code 190
+access_token=EAAmalformed   -> HTTP 400  code 190
+access_token=<empty>        -> HTTP 400  code 2500
+```
+
+Every token failure is a **400**. Classifying on status alone therefore sent all of them to
+`rejected` — the bucket meaning *the caller sent something wrong* — so an expired Page token, the
+one failure whose answer is *rotate the credential*, was reported as a bad cursor (MRO-357).
+That is MRO-338's defect with the arrows reversed, and the more expensive direction: the advice
+given was to retry without a cursor, which fails identically every time and never mentions the
+token.
+
+Auth is now recognised from upstream's code as well: `102`, `190`, `463`, `467`, `2500`.
+**Codes, not the `OAuthException` type**, because that type also covers permission errors such as
+code `10` — the missing `pages_read_user_content` scope — which needs a scope granted, not a
+perfectly good credential rotated.
+
+### A hint is never attached to an input the caller did not send
+
+If a request carried no `?after=`, it cannot have sent a bad one, so the cursor hint is omitted
+rather than guessed. What remains is upstream's own message and code, which is all the server
+honestly has. This is independent of the code classification above and holds even for a failure
+nothing else recognises.
 
 **The 502-with-a-hint used to be the answer to everything**, including a mistyped cursor. That
 mattered because following it means rotating a working Meta credential across `server/.env`,

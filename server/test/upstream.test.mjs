@@ -32,7 +32,12 @@ const upstream = (status) => Object.assign(new Error('boom'), { status, isUpstre
     check('a cursor upstream refuses is 400, not 502 — the original incident',
         c && c.status === 400 && c.kind === 'rejected', JSON.stringify(c));
 
-    const body = safely(() => describeUpstreamFailure('Instagram', c.kind, 'An unknown error has occurred.'));
+    // sentCursor: true because that IS the incident's shape - the caller passed
+    // an ?after= Instagram never issued. Since MRO-357 the cursor hint is only
+    // attached when a cursor was actually sent, so stating it here is what keeps
+    // this case a faithful reproduction rather than a weaker one.
+    const body = safely(() => describeUpstreamFailure(
+        'Instagram', c.kind, 'An unknown error has occurred.', { sentCursor: true }));
     check('and its body does NOT blame the token',
         body && body.hint !== undefined && !/token/i.test(body.hint),
         JSON.stringify(body));
@@ -102,6 +107,68 @@ check('the original body is not mutated',
     (() => { const b = { error: 'x' }; withUpstreamCode(b, { upstreamCode: 1 }); return b.code === undefined; })());
 check('a null error does not throw',
     safely(() => withUpstreamCode({ error: 'x' }, null)).error === 'x');
+
+
+// --- MRO-357: Meta reports auth failures as 400, never 401/403 --------------
+//
+// Measured against the Graph API directly. A malformed token, a plausible-
+// looking wrong one and an empty one all answered 400 with code 190 or 2500.
+// So the 401/403 rule can never fire for Meta, and every token failure was
+// landing in `rejected` - the bucket that means "your request was wrong".
+
+const withCode = (status, upstreamCode) =>
+    Object.assign(new Error('boom'), { status, upstreamCode, isUpstream: true });
+
+check('an invalid token (400 + code 190) is auth, not a rejected request',
+    classifyUpstream(withCode(400, 190)).kind === 'auth',
+    `got ${classifyUpstream(withCode(400, 190)).kind}`);
+check('and it answers 502, so it is not read as caller error',
+    classifyUpstream(withCode(400, 190)).status === 502);
+check('code 2500 - no active token - is auth too',
+    classifyUpstream(withCode(400, 2500)).kind === 'auth');
+check('code 102 - session invalid - is auth too',
+    classifyUpstream(withCode(400, 102)).kind === 'auth');
+
+// THE REGRESSION GUARD. MRO-338 is the reason this module exists; if fixing
+// 357 turned a bad cursor back into a token accusation, the fix is a net loss.
+check('a bad cursor (400, code 100) is STILL rejected, not auth',
+    classifyUpstream(withCode(400, 100)).kind === 'rejected',
+    `got ${classifyUpstream(withCode(400, 100)).kind} - MRO-338 regressed`);
+check('and still answers 400',
+    classifyUpstream(withCode(400, 100)).status === 400);
+
+// Permission errors are NOT credential errors. Code 10 is the missing
+// pages_read_user_content scope: it needs a scope granted, not a working
+// token rotated across .env, Vercel and the vault.
+check('code 10 - a missing scope - is not called an auth failure',
+    classifyUpstream(withCode(400, 10)).kind === 'rejected');
+
+// The positive control, again: a real outage must stay a 502 unreachable.
+check('a 5xx carrying an ordinary code is still unreachable',
+    classifyUpstream(withCode(500, 1)).kind === 'unreachable',
+    'a code must not turn an outage into something a caller can fix');
+check('no status at all is still unreachable',
+    classifyUpstream(withCode(null, 190)).kind === 'unreachable');
+
+// --- MRO-357: never blame a cursor the caller did not send ------------------
+
+const noCursor = describeUpstreamFailure('Facebook', 'rejected', 'Invalid OAuth access token');
+const withCursor = describeUpstreamFailure('Facebook', 'rejected', 'Invalid cursor', { sentCursor: true });
+
+check('a request that sent no cursor gets no cursor hint',
+    !('hint' in noCursor),
+    `hint was: ${noCursor.hint}`);
+check('but it still carries the message upstream sent',
+    noCursor.message === 'Invalid OAuth access token');
+check('a request that DID send a cursor still gets the hint',
+    typeof withCursor.hint === 'string' && withCursor.hint.includes('?after='),
+    `hint was: ${withCursor.hint}`);
+check('the default is no hint, so a forgotten argument under-claims rather than over-claims',
+    !('hint' in describeUpstreamFailure('Instagram', 'rejected', 'x')));
+check('the auth body still names the token, which is now reachable for Meta',
+    describeUpstreamFailure('Facebook', 'auth', 'x').hint.includes('expired'));
+check('unreachable still carries no hint at all',
+    !('hint' in describeUpstreamFailure('Facebook', 'unreachable', 'x')));
 
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');
 process.exit(fail.length ? 1 : 0);

@@ -732,7 +732,7 @@ app.get('/api/instagram/media', async (req, res) => {
         if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'Instagram');
         const { status, kind } = classifyUpstream(error);
         console.error(`Error fetching Instagram media (${kind}):`, error.message);
-        return res.status(status).json(withUpstreamCode(describeUpstreamFailure('Instagram', kind, error.message), error));
+        return res.status(status).json(withUpstreamCode(describeUpstreamFailure('Instagram', kind, error.message, { sentCursor: Boolean(req.query.after) }), error));
     }
 });
 
@@ -789,7 +789,7 @@ app.get('/api/youtube/videos', async (req, res) => {
         if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'YouTube');
         console.error('Error fetching YouTube videos:', error.message);
         const { status, kind } = classifyUpstream(error);
-        return res.status(status).json(withUpstreamCode(describeUpstreamFailure('YouTube', kind, error.message), error));
+        return res.status(status).json(withUpstreamCode(describeUpstreamFailure('YouTube', kind, error.message, { sentCursor: Boolean(req.query.after) }), error));
     }
 });
 
@@ -816,7 +816,7 @@ app.get('/api/facebook/posts', async (req, res) => {
         if (error instanceof BudgetExceededError) return sendBudgetSpent(res, 'Facebook');
         console.error('Error fetching Facebook posts:', error.message);
         const { status, kind } = classifyUpstream(error);
-        return res.status(status).json(withUpstreamCode(describeUpstreamFailure('Facebook', kind, error.message), error));
+        return res.status(status).json(withUpstreamCode(describeUpstreamFailure('Facebook', kind, error.message, { sentCursor: Boolean(req.query.after) }), error));
     }
 });
 
