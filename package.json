@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint:ci": "oxlint --deny-warnings",
     "scan:secrets": "node scripts/scan-secrets.mjs",
-    "test": "node scripts/scan-secrets.test.mjs && node src/services/mediaApi.test.mjs && npm test --prefix server",
+    "test": "node scripts/commit-trailer.test.mjs && node scripts/scan-secrets.test.mjs && node src/services/mediaApi.test.mjs && npm test --prefix server",
     "prepare": "node scripts/install-hooks.mjs"
   },
   "dependencies": {

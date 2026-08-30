@@ -359,6 +359,22 @@ is the only remedy afterwards. `npm run scan:secrets` runs the same check by han
 
 `.githooks/pre-push` runs lint, build and the full test suite before a push.
 
+`.githooks/prepare-commit-msg` records **which agent session** ran `git commit`, as a
+`Claude-Session:` trailer. Several Claude sessions run on this machine and all commit as the same
+git identity, so without it `git log` cannot say which one made a change — and a session auditing
+work cannot establish the work was not its own. `Co-Authored-By: Claude Opus 5` does not help: it
+names the *model*, identical across every session, so it is a present-but-useless field.
+
+The value is **scoped, not the raw identifier**. The harness exports the session UUID into every
+child process; this repo is public and a published commit cannot be unpublished, so the id is
+hashed and only `cs-` plus eight hex digits is written — stable within a session, distinct between
+sessions, not reversible. Set `CLAUDE_SESSION_TRAILER` to override with an explicit value.
+
+It writes **nothing** when no session id is present, because a person's commit is not a session's.
+It never overwrites an existing trailer, so cherry-picking or amending a peer's commit keeps naming
+whoever did the work — and it leaves merge and squash messages alone. Decided on MRO-346; the
+limits are on MRO-320, chiefly that the trailer records who ran `git commit`, not whose work it is.
+
 Both are speed bumps rather than gates: bypassable with `--no-verify`, and only active where
 `npm install` has been run. CI is the backstop. Branch protection would be the real gate but needs
 a paid GitHub plan.

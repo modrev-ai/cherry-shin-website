@@ -1,0 +1,57 @@
+#!/bin/sh
+#
+# Records WHICH agent session ran `git commit`, as a scoped, non-identifying
+# value.
+#
+# Why this exists (MRO-320): every session commits as the same git identity, so
+# `git log` cannot say which one made a change - and a session auditing work
+# cannot establish that the work was not its own. `Co-Authored-By: Claude Opus 5`
+# does not help: it names the MODEL, which is identical across every session on
+# this machine, so it is a present-but-useless field rather than an absent one.
+#
+# Why SCOPED rather than the raw id (MRO-346): the harness exports
+# CLAUDE_CODE_SESSION_ID - a raw UUID - into every child process. This repo is
+# PUBLIC, so writing that verbatim would publish an internal identifier to
+# GitHub permanently, and a published commit message cannot be unpublished.
+# Our user chose "install with a scoped value", so the id is hashed here and
+# only the first 8 hex digits are kept:
+#
+#   * stable within a session, so two commits from one session match
+#   * distinct between sessions, which is the whole point
+#   * not reversible to the UUID, because a v4 UUID carries ~122 bits
+#
+# Writes NOTHING when no session id is present. A person's commit is not a
+# session's, and inventing an attribution is the false-attribution failure this
+# whole line of work exists to remove.
+
+MSG_FILE="$1"
+SOURCE="$2"
+
+[ -n "$MSG_FILE" ] || exit 0
+
+# Leave merges and squashes alone: their message is assembled from commits that
+# already carry whatever trailers they had, and rewriting it would restate
+# somebody else's attribution as this session's.
+case "$SOURCE" in
+    merge|squash) exit 0 ;;
+esac
+
+# Never overwrite a trailer already present - an amend or a cherry-pick of a
+# peer's commit must keep naming the session that actually did the work.
+if grep -qi '^Claude-Session:' "$MSG_FILE" 2>/dev/null; then
+    exit 0
+fi
+
+if [ -n "$CLAUDE_SESSION_TRAILER" ]; then
+    # An explicit value is its own consent, and is used as given.
+    VALUE="$CLAUDE_SESSION_TRAILER"
+elif [ -n "$CLAUDE_CODE_SESSION_ID" ]; then
+    command -v node >/dev/null 2>&1 || exit 0
+    VALUE=$(node -e "const c=require('node:crypto');process.stdout.write('cs-'+c.createHash('sha256').update(process.env.CLAUDE_CODE_SESSION_ID).digest('hex').slice(0,8))") || exit 0
+else
+    exit 0
+fi
+
+[ -n "$VALUE" ] || exit 0
+
+git interpret-trailers --in-place --trailer "Claude-Session: $VALUE" "$MSG_FILE" 2>/dev/null || exit 0
