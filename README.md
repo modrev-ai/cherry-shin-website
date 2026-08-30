@@ -379,8 +379,8 @@ Both are speed bumps rather than gates: bypassable with `--no-verify`, and only 
 `npm install` has been run. CI is the backstop. Branch protection would be the real gate but needs
 a paid GitHub plan.
 
-`npm test` runs twelve frameworkless suites — three at the root (the commit trailer, the secret
-scanner, the client-side feed walk) and nine under `server/`. Each is plain `node` against a
+`npm test` runs thirteen frameworkless suites — three at the root (the commit trailer, the secret
+scanner, the client-side feed walk) and ten under `server/`. Each is plain `node` against a
 hand-rolled `check(name, ok, detail)`, so there is nothing to install and any one of them runs on
 its own.
 
