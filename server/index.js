@@ -682,6 +682,18 @@ function sendBudgetSpent(res, label) {
     });
 }
 
+// A platform with no credentials is not a server fault. It is the documented
+// fallback state - the feed stands in with sample content for that platform
+// alone - so answering 500 put a permanent floor under the 5xx rate and made a
+// real outage indistinguishable from TikTok simply not being set up (MRO-355).
+//
+// The flag is what the client reads; the status is what a person reading a
+// dashboard at 2am reads, and it must not say the server broke when it did not.
+// /api/instagram/status already answered this same condition with a plain 200.
+function sendUnconfigured(res, error) {
+    return res.status(200).json({ configured: false, error });
+}
+
 function sendCached(res, result) {
     const label = { store: 'HIT', upstream: 'MISS', stale: 'STALE' };
     res.set('X-Cache', label[result.source] || 'MISS');
@@ -704,7 +716,7 @@ app.get('/api/instagram/media', async (req, res) => {
         const after = cursor.value;
 
         if (isPlaceholderToken(token) || isPlaceholderToken(IG_USER_ID)) {
-            return res.status(500).json({ configured: false, error: 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env' });
+            return sendUnconfigured(res, 'Instagram not configured. Set IG_ACCESS_TOKEN and IG_USER_ID in .env');
         }
 
         // Keyed by limit and cursor so different page sizes and different points
@@ -763,7 +775,7 @@ app.get('/api/youtube/videos', async (req, res) => {
         const after = cursor.value;
 
         if (isPlaceholderToken(YOUTUBE_API_KEY) || isPlaceholderToken(YOUTUBE_CHANNEL_ID)) {
-            return res.status(500).json({ configured: false, error: 'YouTube not configured. Set YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID in .env' });
+            return sendUnconfigured(res, 'YouTube not configured. Set YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID in .env');
         }
 
         const result = await cached(
@@ -790,7 +802,7 @@ app.get('/api/facebook/posts', async (req, res) => {
         const after = cursor.value;
 
         if (!isFacebookConfigured()) {
-            return res.status(500).json({ configured: false, error: 'Facebook not configured. Set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN in .env' });
+            return sendUnconfigured(res, 'Facebook not configured. Set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN in .env');
         }
 
         const result = await cached(
@@ -819,11 +831,11 @@ app.get('/api/tiktok/posts', async (req, res) => {
         const useApi = isTikTokApiConfigured();
 
         if (!useApi && TIKTOK_POST_URLS.length === 0) {
-            return res.status(500).json({
-                configured: false,
-                error: 'TikTok not configured. Set TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET and '
+            return sendUnconfigured(
+                res,
+                'TikTok not configured. Set TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET and '
                     + 'TIKTOK_REFRESH_TOKEN for the Display API, or TIKTOK_POST_URLS for oEmbed.',
-            });
+            );
         }
 
         const result = await cached(

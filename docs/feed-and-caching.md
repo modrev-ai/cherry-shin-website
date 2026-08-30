@@ -202,6 +202,7 @@ have different owners (MRO-338):
 | **400** `"<Platform> rejected the request"` | Upstream refused what we asked for. On these routes the only caller-controlled input is `?after=`, so in practice it is a cursor the platform did not issue | The caller. Retry without `?after=` |
 | **502** `"<Platform> API error"`, no hint | We could not reach upstream, or it failed on its own account | Nobody, immediately. It is an outage |
 | **502** with a token hint | Upstream answered 401 or 403 | Rotate the credential — and **only** this response says so |
+| **200** `{"configured": false}` | The platform has no credentials. Not a failure at all | Nobody. Set them whenever you want that platform live |
 
 `server/upstream.js` decides which, from the HTTP status upstream returned. Upstream's own
 `message` and `code` are passed through untouched; nothing else is asserted about the cause.
@@ -209,6 +210,21 @@ have different owners (MRO-338):
 **The 502-with-a-hint used to be the answer to everything**, including a mistyped cursor. That
 mattered because following it means rotating a working Meta credential across `server/.env`,
 Vercel and the vault — a real operation performed for nothing.
+
+### "Not configured" is not a server error
+
+Until MRO-355 an unconfigured platform answered **500**. TikTok has no post URLs, so
+`/api/tiktok/posts` returned 500 on every visitor's first feed extension — permanently, and by
+design. That put a floor under the 5xx rate that no healthy deployment could get below, so a
+5xx alarm could not separate *TikTok was never set up* from *the Page token just expired*. An
+alarm that is always ringing is not an alarm.
+
+Only the status changed; the `configured` flag was always in the body. But **both sides had to
+move together.** `fetchLive` read the flag only on its error path, so a 200 would have arrived
+as *configured, healthy, zero items* — taking neither the outage branch nor the samples branch.
+The platform would have dropped out of the feed silently, with nothing anywhere saying why. It
+now reads the flag on both paths, which also makes it correct against a server still answering
+500, so the two are safe to deploy in either order.
 
 ### Instagram is the exception, and it is upstream's doing
 

@@ -382,6 +382,21 @@ async function fetchLive(path, label) {
         }
 
         const data = await response.json();
+
+        // A platform with no credentials is a valid answer, not a failure, so it
+        // arrives as a plain 200 carrying the flag (MRO-355). The flag has to be
+        // read here as well as on the error path above. A 200 that is not read
+        // for it lands as "configured, healthy, zero items", which takes neither
+        // the outage branch nor the samples branch - the platform would drop out
+        // of the feed silently, with nothing anywhere saying why.
+        //
+        // Reading it on both paths also means this is correct against a server
+        // that still answers 500, which is what makes the two safe to deploy in
+        // either order.
+        if (data?.configured === false) {
+            return { ok: false, items: [], configured: false, next: null };
+        }
+
         return { ok: true, items: data.data || [], configured: true, next: data.paging?.next || null };
     } catch (err) {
         // The timeout can land anywhere in the exchange, not only on the fetch

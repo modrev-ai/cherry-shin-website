@@ -308,6 +308,80 @@ const idsOf = page => page.map(i => i.id);
         `raised ${raised && raised.name}, got ${page0 && page0.length} items`);
 }
 
+// MRO-355. A platform with no credentials now answers a plain 200 carrying the
+// flag, because that condition is not a server fault and a permanent 5xx floor
+// makes a real outage unreadable. The status changed; the meaning did not.
+const unconfigured200 = error =>
+    respond({ status: 200, body: { configured: false, error } });
+
+// 14. The new shape has to behave exactly as the old one did: samples, once.
+{
+    const routes = allPlatforms(1, {
+        instagram: () => unconfigured200('Instagram not configured'),
+    });
+    const { mod, forPath } = await load(routes);
+    const seen = [];
+    for (let page = 0; page <= 3; page++) seen.push(...await mod.fetchMixedMedia(page));
+
+    const samples = new Set(seen.filter(i => i.platform === 'instagram').map(i => i.id));
+    check('a 200 carrying configured:false still contributes samples',
+        samples.size > 0 && [...samples].every(id => id.startsWith('ig')),
+        `saw ${[...samples].join(', ')}`);
+    check('and is still asked only once',
+        forPath(PATHS.instagram).length === 1,
+        `asked ${forPath(PATHS.instagram).length} times`);
+}
+
+// 15. The positive control for 14, and the one that matters most. Reading the
+//     flag on the ok path must not swallow the ordinary path: a healthy 200
+//     with posts still has to deliver them. Without this, returning
+//     configured:false unconditionally would satisfy 14 perfectly.
+{
+    const { mod } = await load(allPlatforms(25));
+    const page0 = await mod.fetchMixedMedia(0);
+    // Live fixtures are `<platform>-<n>`; every sample id is short - tt1, yt2,
+    // ig1, fb1. Matching the live shape explicitly is what gives this case
+    // teeth. An earlier version excluded only 'ig-sample' and so counted the
+    // other three platforms' samples as live, which meant it passed whatever
+    // the code did - it killed no mutation at all.
+    const live = page0.filter(i => /^(instagram|youtube|tiktok|facebook)-[0-9]+$/.test(String(i.id)));
+    check('a healthy 200 still delivers its live posts, not samples',
+        page0.length === 6 && live.length === 6,
+        `got ${page0.length} items, ${live.length} live: ${idsOf(page0).join(', ')}`);
+}
+
+// 16. A CONFIGURED platform answering 200 with nothing is not the same thing and
+//     must not get samples. This is the line the flag draws: absent credentials
+//     stand in, an empty real answer does not - inventing posts under a live
+//     account is the failure MRO-317 and case 6 exist to prevent.
+{
+    const routes = allPlatforms(1, {
+        instagram: () => respond({ status: 200, body: { data: [], paging: {} } }),
+    });
+    const { mod } = await load(routes);
+    const seen = [];
+    for (let page = 0; page <= 3; page++) seen.push(...await mod.fetchMixedMedia(page));
+    const invented = seen.filter(i => i.platform === 'instagram');
+    check('an empty 200 from a configured platform gets no samples',
+        invented.length === 0, `leaked ${invented.map(i => i.id).join(', ')}`);
+}
+
+// 17. Backward compatibility, stated as a test rather than as a claim. The
+//     client must be correct against a server that still answers 500, which is
+//     what makes the two sides safe to deploy in either order - and what makes a
+//     browser tab left open across the deploy harmless.
+{
+    const routes = allPlatforms(1, {
+        instagram: () => errored('Instagram not configured', false),
+    });
+    const { mod } = await load(routes);
+    const seen = [];
+    for (let page = 0; page <= 3; page++) seen.push(...await mod.fetchMixedMedia(page));
+    const samples = seen.filter(i => i.platform === 'instagram');
+    check('the old 500 shape is still read correctly',
+        samples.length > 0, 'no samples from the legacy shape');
+}
+
 console.warn = realWarn;
 console.log(fail.length ? `\n${fail.length} failed:\n  ${fail.join('\n  ')}` : '\nAll passed.');
 process.exit(fail.length ? 1 : 0);
