@@ -215,12 +215,19 @@ const idsOf = page => page.map(i => i.id);
 // 10. Once the catalogue is exhausted the feed repeats - there is nothing else
 //     to show - but a post must never land on two consecutive slides.
 //
-//     The pool has to be small for this to be worth asserting. With every
-//     platform down it holds just X's four samples, so the feed reaches a cycle
-//     boundary - the seam where a post can land on top of itself - every four
-//     items rather than every hundred. The first version of this case used a
-//     full catalogue, reached a boundary about twice, and passed just as
-//     happily with the anti-stutter swap deleted.
+//     The pool has to be small for this to be worth asserting. It holds just
+//     Facebook's four samples - Facebook UNCONFIGURED so it stands in, every
+//     other platform down - so the feed reaches a cycle boundary, the seam
+//     where a post can land on top of itself, every four items rather than
+//     every hundred. The first version of this case used a full catalogue,
+//     reached a boundary about twice, and passed just as happily with the
+//     anti-stutter swap deleted.
+//
+//     That four-item pool used to come from X's samples, which were injected
+//     unconditionally. X was dropped (MRO-242), so the fixture is rebuilt from
+//     an unconfigured Facebook - same size, same boundary frequency, same
+//     discriminating power. Without this substitution the case would still
+//     pass and would no longer be able to fail.
 //
 //     In the green direction this is exact: with the swap in place no stutter
 //     is possible at all. In the red direction a boundary collision is a 1-in-4
@@ -229,6 +236,7 @@ const idsOf = page => page.map(i => i.id);
 {
     const routes = {};
     for (const path of Object.values(PATHS)) routes[path] = () => errored('down');
+    routes[PATHS.facebook] = () => errored('down', false);
     const { mod } = await load(routes);
     const seen = [];
     for (let page = 0; page <= 24; page++) seen.push(...await mod.fetchMixedMedia(page));
@@ -265,18 +273,39 @@ const idsOf = page => page.map(i => i.id);
         overlap.length === 0, `shared ${overlap.join(', ')}`);
 }
 
-// 13. X has no integration at all, so its samples join the first batch. That is
-//     what guarantees the pool is never empty, which is what lets the cycling
-//     branch always extend the stream - so a page is never empty for an honest
-//     reason, and an empty one always means something threw.
+// 13. A total outage must reach the UI as an ERROR, never as an empty page,
+//     because EndlessReels reads a zero-length page as "you have reached the
+//     end" and stops the scroll sentinel.
+//
+//     This used to hold by accident: X had no integration, so its samples were
+//     pushed unconditionally and the pool was never empty. Dropping X (MRO-242)
+//     removed that prop, so the assertion is now on the behaviour itself rather
+//     than on the sample content that happened to guarantee it.
 {
     const routes = {};
     for (const path of Object.values(PATHS)) routes[path] = () => errored('down');
     const { mod } = await load(routes);
-    const page0 = await mod.fetchMixedMedia(0);
-    check('X samples keep the feed alive when every platform is down',
-        page0.length === 6 && page0.every(i => i.platform === 'twitter'),
-        `got ${page0.length} items from ${[...new Set(page0.map(i => i.platform))].join(', ')}`);
+    let raised = null, returned = null;
+    try { returned = await mod.fetchMixedMedia(0); } catch (err) { raised = err; }
+    check('every configured platform failing raises rather than returning an empty page',
+        raised instanceof mod.BackendUnreachableError,
+        `raised ${raised && raised.name}, returned ${returned && returned.length} items`);
+    check('and specifically does NOT return [], which would render as end-of-feed',
+        returned === null, `returned ${JSON.stringify(returned)}`);
+}
+
+// 13b. The positive control for 13: an UNCONFIGURED platform is not an outage.
+//      It stands in with samples, so the feed still serves a page. Without this
+//      the module could raise on everything and satisfy 13 completely.
+{
+    const routes = {};
+    for (const path of Object.values(PATHS)) routes[path] = () => errored('down', false);
+    const { mod } = await load(routes);
+    let raised = null, page0 = null;
+    try { page0 = await mod.fetchMixedMedia(0); } catch (err) { raised = err; }
+    check('unconfigured platforms still serve samples rather than raising',
+        raised === null && Array.isArray(page0) && page0.length > 0,
+        `raised ${raised && raised.name}, got ${page0 && page0.length} items`);
 }
 
 console.warn = realWarn;

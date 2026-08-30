@@ -14,7 +14,6 @@ A full-screen reel feed that mirrors Cherry Shin's posts from several social pla
 | Instagram | **Live** | already configured |
 | Facebook | **Live** | like and comment counts need `pages_read_user_content` (MRO-248) |
 | TikTok | Built, sample content | `TIKTOK_POST_URLS` for oEmbed, or `TIKTOK_CLIENT_*` for the Display API |
-| X | Sample content | a decision, not a blocker — MRO-242: ~$3/month of usage credits, or drop it |
 
 Any platform without credentials falls back to sample content for that platform only, so the feed
 never breaks because a platform is unconfigured. A sample is labelled `Sample` on the card and
@@ -277,10 +276,14 @@ A post that cannot be resolved — deleted, private, mistyped — is skipped and
 card rather than the whole feed. The embed uses `tiktok.com/embed/v2/{id}`, since the HTML oEmbed
 returns is a blockquote plus TikTok's widget script and will not load in the feed's iframe player.
 
-### X — needs a paid tier
+### X — dropped
 
-Reading a user timeline is not available on the free tier. Options are to pay, leave it on sample
-content, or drop it.
+Reading a user timeline needs paid API credits, and the decision (MRO-242) was to **drop the
+platform rather than pay for it or leave placeholder posts on a live brand site indefinitely**.
+X is gone from the feed, the platform table and the icon set — not left as a disabled tile.
+
+The `twitter:` meta tags in `index.html` stay. Those are Twitter Card tags, which control how a
+shared link previews across several services, and are unrelated to the dropped integration.
 
 > Every path above needs admin access to the account being mirrored. There is no compliant way to
 > mirror someone else's posts without it; scraping would breach all of these platforms' terms.
@@ -327,8 +330,20 @@ The two ways out are not equivalent, and the difference is DNS rather than money
 | **Vercel Pro** | $20 per developer seat/month | Nothing. No DNS change, no certificate re-issue |
 | **Cloudflare Pages** | Free, and no non-commercial restriction | The **whole zone**. The site is served at the apex, and an apex custom domain requires the domain to be a Cloudflare zone — so every record is re-created, `google._domainkey` included |
 
-So it is $20/month against a mandatory nameserver migration whose first casualty, done carelessly,
-is email signing. Undecided — see MRO-243, where both options are costed.
+So it was $20/month against a mandatory nameserver migration whose first casualty, done
+carelessly, is email signing.
+
+**Decided (MRO-243): stay on Hobby.** The commercial-use exposure is accepted deliberately rather
+than left as an unexamined default — the concrete fair-use examples are taking payment and carrying
+advertisements, and this site does neither. What remains is the broad financial-gain clause, which
+is a judgement.
+
+Two consequences follow and are worth stating rather than rediscovering. **The repo stays public**,
+because Hobby does not support Git integration for a private organisation repo — so nothing secret
+may ever be committed, which is what `scripts/scan-secrets.mjs` and the pre-commit hook enforce.
+And **builds can still land in `BLOCKED` with no logs**; that is this plan's failure mode, not a
+new fault. Revisit if the site ever takes payment or carries advertising, which is the line the
+fair-use examples actually draw.
 
 ## CI and hooks
 
@@ -353,11 +368,9 @@ scanner — 79 assertions in total.
 
 ## Known gaps
 
-- **TikTok and X show sample content.** TikTok is built and needs only `TIKTOK_POST_URLS`
-  (MRO-240); X needs a decision (MRO-242). Both are labelled `Sample` on the card.
-  X closed its legacy tiers to new signups and now bills pay-per-usage, so this is not a
-  subscription: reading our own account costs $0.001 per post, which is roughly **$3/month**
-  at a 6-hour cache TTL. The choice is buy credits or drop the platform.
+- **TikTok shows sample content.** It is built and needs only `TIKTOK_POST_URLS` (MRO-240);
+  its cards are labelled `Sample`. X is no longer listed here at all — it was dropped rather
+  than left permanently sampled (MRO-242).
 - **Facebook shows no like or comment counts.** Those fields need `pages_read_user_content`, which
   the Page token does not carry; requesting them without it fails the whole request, so the server
   falls back once and remembers.

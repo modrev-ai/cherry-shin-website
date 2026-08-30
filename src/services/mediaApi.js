@@ -225,44 +225,6 @@ const facebookContent = [
     },
 ];
 
-const twitterContent = [
-    {
-        id: 'tw1',
-        platform: 'twitter',
-        isSample: true,
-        title: 'currently accepting cafe recommendations in Seoul ☕',
-        thumbnail: 'https://picsum.photos/seed/cstw1/800/450',
-        embedUrl: null,
-        url: 'https://x.com/itscherryshin'
-    },
-    {
-        id: 'tw2',
-        platform: 'twitter',
-        isSample: true,
-        title: 'new video is live — go watch it before I overthink it',
-        thumbnail: 'https://picsum.photos/seed/cstw2/800/450',
-        embedUrl: null,
-        url: 'https://x.com/itscherryshin'
-    },
-    {
-        id: 'tw3',
-        platform: 'twitter',
-        isSample: true,
-        title: 'packing for Tokyo, taking outfit requests',
-        thumbnail: 'https://picsum.photos/seed/cstw3/800/450',
-        embedUrl: null,
-        url: 'https://x.com/itscherryshin'
-    },
-    {
-        id: 'tw4',
-        platform: 'twitter',
-        isSample: true,
-        title: 'the lighting did most of the work here honestly',
-        thumbnail: 'https://picsum.photos/seed/cstw4/800/450',
-        embedUrl: null,
-        url: 'https://x.com/itscherryshin'
-    },
-];
 
 // Small deterministic PRNG. Pagination slices a window out of an ordering, so
 // that ordering has to stay put across the pages being sliced from it - with
@@ -346,8 +308,8 @@ const MAX_PLATFORM_FAILURES = 3;
 const PLATFORM_TIMEOUT_MS = 6000;
 
 // Each live platform, with the sample content that stands in for it while it has
-// no credentials. X is absent because it has no integration at all; its samples
-// are added once alongside the first batch.
+// no credentials. X was dropped rather than left as a permanently sampled tile
+// (MRO-242), so nothing is injected outside this list any more.
 const PLATFORMS = [
     { key: 'instagram', label: 'Instagram', path: '/instagram/media', samples: instagramContent },
     { key: 'youtube', label: 'YouTube', path: '/youtube/videos', samples: youtubeContent },
@@ -524,11 +486,6 @@ async function extendStream() {
             feed.cursors[platform.key] = next || null;
         }
 
-        if (!feed.sampled.has('twitter')) {
-            feed.sampled.add('twitter');
-            batch.push(...twitterContent);
-        }
-
         if (batch.length) {
             const ordered = interleaveByPlatform(batch);
             feed.pool.push(...ordered);
@@ -556,6 +513,14 @@ async function servePage(page) {
         if (!await extendStream()) break;
     }
 
+    // Nothing at all - not one live item and not one sample. An unconfigured
+    // platform still contributes samples, so an empty stream means every
+    // CONFIGURED platform failed. That is an outage, and it must reach the UI
+    // as an error: returning [] here would render as "you have reached the end".
+    if (feed.stream.length === 0) {
+        throw new BackendUnreachableError(new Error('no platform returned anything'));
+    }
+
     const start = page * ITEMS_PER_PAGE;
     // cycleId keeps React keys unique when a post comes round again.
     const items = feed.stream
@@ -576,10 +541,11 @@ export async function fetchMixedMedia(page = 0) {
 
     // Every failure reaches the UI so it can offer a retry. Returning an empty
     // page instead would be read as the end of the feed, which stops the scroll
-    // sentinel and finishes the session - and an empty page cannot happen for
-    // any honest reason: X's samples go into the pool on the first extension,
-    // so the cycling branch can always extend the stream. An empty page only
-    // ever means something threw, and a timeout bug that returned one blanked
-    // the whole site rather than costing one platform.
+    // sentinel and finishes the session - a timeout bug that returned one
+    // blanked the whole site rather than costing one platform.
+    //
+    // That invariant used to hold by accident: X had no integration, so its
+    // samples were pushed unconditionally and the pool was never empty. Dropping
+    // X (MRO-242) removed that prop, so servePage now asserts it directly.
     return run;
 }
