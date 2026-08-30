@@ -379,8 +379,25 @@ Both are speed bumps rather than gates: bypassable with `--no-verify`, and only 
 `npm install` has been run. CI is the backstop. Branch protection would be the real gate but needs
 a paid GitHub plan.
 
-`npm test` runs four suites — the feed walk, the cache, the request parameters and the secret
-scanner — 79 assertions in total.
+`npm test` runs eleven frameworkless suites — three at the root (the commit trailer, the secret
+scanner, the client-side feed walk) and eight under `server/`. Each is plain `node` against a
+hand-rolled `check(name, ok, detail)`, so there is nothing to install and any one of them runs on
+its own.
+
+**There are deliberately no component tests, and that is a decision rather than an omission.** The
+behavioural half of the feed — the walk, cursors, cycling, failure backoff, sample rules — lives in
+`src/services/mediaApi.js` and has a suite. What is left in `src/components/` is layout and one or
+two conditionals, and layout is what a DOM assertion tests worst: it can confirm a class is present,
+not that anything is legible or reachable. The guarantees in that layer that have actually caught
+bugs were caught by **measuring the rendered page** — tap targets at 375×812 (MRO-280), eager
+versus lazy card loading (MRO-268) — and no virtual DOM would have found either. A harness would
+cost three dependencies and a second test idiom alongside the suites above, and buy assertions on
+conditionals that are verifiable by reading them. Costed and decided on MRO-311.
+
+If a component ever grows a genuinely behavioural decision — a retry, a state machine, an ordering
+rule — move that logic into a plain module and give it a plain suite, the way `params.js`,
+`diagnostics.js`, `tiktok.js`, `credentials.js` and `stats.js` were. That path needs no dependency
+and no new convention.
 
 ## Known gaps
 
