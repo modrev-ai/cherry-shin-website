@@ -5,10 +5,16 @@ on:
     branches: [main]
   pull_request:
 
-# A newer push to the same branch makes the previous run irrelevant
+# Cancel superseded runs on pull requests, NEVER on main (MRO-376).
+#
+# This used to read "a newer push to the same branch makes the previous run
+# irrelevant" and was unconditional. That is true of a PR branch and false of
+# main: a superseded commit on main is not irrelevant, it is permanent and
+# already deployed, and cancelling its run leaves it with no verdict at all.
+# Cancelling PR churn is the feature; cancelling a push to main is the defect.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
