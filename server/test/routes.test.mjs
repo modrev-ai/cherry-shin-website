@@ -444,6 +444,65 @@ function stubUpstream(payload, status = 400) {
     await app.close();
 }
 
+// 10. MRO-410. The contradiction guard: no response may claim X-Cache: HIT and
+//     carry Warning: 110 - Response is stale at the same time. Those two headers
+//     are set from different fields - `source` and `state` - and when the error
+//     backoff pushed `expiresAt` forward they disagreed on every stale response
+//     after the first.
+//
+//     Stated as the contradiction rather than as "the third response says STALE",
+//     because the contradiction is what a reader or a CDN would actually notice,
+//     and it stays true however the labels are later reorganised.
+{
+    let healthy = true;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+        const href = String(url);
+        if (href.includes('127.0.0.1')) return realFetch(url, init);
+        if (healthy) {
+            return {
+                ok: true, status: 200,
+                json: async () => ({ data: [{ id: '1', message: 'hi', created_time: '2026-01-01T00:00:00+0000' }] }),
+            };
+        }
+        return { ok: false, status: 500, json: async () => ({ error: { message: 'upstream down', code: 1 } }) };
+    };
+
+    const priorTtl = process.env.CACHE_TTL_MS;
+    process.env.CACHE_TTL_MS = '20';   // so the entry expires within the test
+    const app = await startApp({ FB_PAGE_ID: '123456789', FB_PAGE_ACCESS_TOKEN: 'EAAjunktokennotreal' });
+
+    const seen = [];
+    const hit = async (label) => {
+        const r = await realFetch(`${app.base}/api/facebook/posts?limit=3`);
+        seen.push({ label, status: r.status, cache: r.headers.get('x-cache'), warning: r.headers.get('warning') });
+    };
+
+    await hit('cold');
+    await new Promise(r => setTimeout(r, 60));   // let it go stale
+    healthy = false;
+    await hit('first-failure');
+    await hit('second-failure');
+    await hit('third-failure');
+
+    const contradictory = seen.filter(r => r.cache === 'HIT' && r.warning);
+    const staleOnes = seen.filter(r => r.warning);
+
+    check('no response claims a fresh HIT while warning that it is stale',
+        contradictory.length === 0, JSON.stringify(contradictory));
+    check('the degraded responses are labelled STALE, not HIT',
+        staleOnes.length === 3 && staleOnes.every(r => r.cache === 'STALE'),
+        JSON.stringify(seen));
+    // Without this the case would pass against a server that simply 502s, which
+    // is not stale-on-error working - it is stale-on-error gone.
+    check('and they are still 200s carrying the last good payload',
+        seen.every(r => r.status === 200), JSON.stringify(seen.map(r => [r.label, r.status])));
+
+    if (priorTtl === undefined) delete process.env.CACHE_TTL_MS; else process.env.CACHE_TTL_MS = priorTtl;
+    globalThis.fetch = realFetch;
+    await app.close();
+}
+
 loud();
 console.log = realLog;
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');

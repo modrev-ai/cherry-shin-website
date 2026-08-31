@@ -171,6 +171,24 @@ export async function cached(key, producer, options = {}) {
         return describe(entry, ttlMs, 'store');
     }
 
+    // Expired, but upstream failed recently and we are holding off retrying it.
+    // This is a stale serve and says so (MRO-410). It used to be reported as an
+    // ordinary hit, because the error path below pushed `expiresAt` forward to
+    // implement the backoff - so the check above could not tell "still fresh"
+    // from "expired, and we are not retrying yet". Those are now separate
+    // fields, because one value answering two questions gets read as whichever
+    // is more flattering: during an outage every request after the first came
+    // back X-Cache: HIT alongside Warning: 110 - Response is stale.
+    //
+    // Bounded by the entry's OWN maxStaleMs, which is what sweep() deletes on -
+    // serving something the sweeper considers dead would be the same disagreement
+    // one layer down.
+    if (entry && entry.retryAfter && Date.now() < entry.retryAfter
+        && Date.now() - entry.storedAt <= entry.maxStaleMs) {
+        stats.staleServes++;
+        return describe(entry, ttlMs, 'stale');
+    }
+
     // No usable copy and upstream failed recently: fail fast rather than let
     // every caller retry a known-broken upstream.
     const failure = failures.get(key);
@@ -206,6 +224,8 @@ export async function cached(key, producer, options = {}) {
             stats.upstreamCalls++;
             const value = await producer();
             const now = Date.now();
+            // A new object, so any previous `retryAfter` is gone: upstream
+            // answered, so there is nothing left to back off from.
             store.set(key, { value, storedAt: now, expiresAt: now + ttlMs, maxStaleMs });
             failures.delete(key);
             return { value, state: 'fresh', source: 'upstream', ageMs: 0 };
@@ -215,7 +235,9 @@ export async function cached(key, producer, options = {}) {
             const stale = store.get(key);
             if (stale && Date.now() - stale.storedAt <= maxStaleMs) {
                 // Hold off on hammering a failing upstream, but keep serving.
-                stale.expiresAt = Date.now() + errorBackoffMs;
+                // `retryAfter` rather than `expiresAt`: the entry is NOT fresh
+                // and must not start reporting itself as a hit (MRO-410).
+                stale.retryAfter = Date.now() + errorBackoffMs;
                 store.set(key, stale);
                 stats.staleServes++;
                 return describe(stale, ttlMs, 'stale');

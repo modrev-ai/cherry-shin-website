@@ -36,6 +36,74 @@ const stale = await cached('k3', async () => { throw new Error('upstream down');
 check('stale-on-error serves the old copy', stale.value.v === 'good' && stale.source === 'stale',
     JSON.stringify({ source: stale.source, value: stale.value }));
 
+// 3b. MRO-410. The SECOND request inside the same backoff window, which is where
+//     the defect started. The case above stops at the first serve - the one case
+//     whose label was already right - so it could never see this.
+//
+//     The error path used to implement its backoff by pushing `expiresAt`
+//     forward, which made an expired entry satisfy the freshness test and report
+//     itself as an ordinary hit. Measured before the fix: serve 1 source=stale,
+//     serves 2 and 3 source=store with hits+1 and staleServes+0, so during an
+//     outage /api/cache/stats counted roughly one stale serve per 30s and read
+//     every other request as a healthy hit.
+{
+    const before = getStats();
+    let upstreamAttempts = 0;
+    const stillDown = async () => { upstreamAttempts++; throw new Error('upstream down'); };
+
+    const second = await cached('k3', stillDown, { ttlMs: 20, maxStaleMs: 60000 });
+    const third = await cached('k3', stillDown, { ttlMs: 20, maxStaleMs: 60000 });
+    const after = getStats();
+
+    check('a repeat serve inside the backoff window is stale, not a hit',
+        second.source === 'stale' && third.source === 'stale',
+        `sources: ${second.source}, ${third.source}`);
+    check('and the counters say so too - staleServes +2, hits +0',
+        after.staleServes - before.staleServes === 2 && after.hits === before.hits,
+        `staleServes +${after.staleServes - before.staleServes}, hits +${after.hits - before.hits}`);
+    check('the old copy is still what comes back',
+        second.value.v === 'good' && third.value.v === 'good');
+    // The point of the backoff is not calling upstream. If this fires, the label
+    // was fixed by removing the behaviour rather than by describing it.
+    check('and upstream was NOT called again - the backoff still holds',
+        upstreamAttempts === 0, `upstream attempts: ${upstreamAttempts}`);
+}
+
+// 3c. The backoff window does not outrank maxStaleMs.
+//
+//     `retryAfter` is set to failureTime + errorBackoffMs, and the failure path
+//     only sets it while the entry is still within maxStaleMs. So an entry can
+//     cross maxStaleMs partway through a backoff window, and the read branch has
+//     to re-check rather than trust that retryAfter implies servable.
+//
+//     Caught by mutation: removing the bound left every other case green,
+//     because in ordinary settings the overshoot is 30s against a 24h ceiling.
+//     It is load-bearing anyway - that ceiling exists because a cached payload
+//     holds media URLs signed at fill time, and serving past it returns a
+//     complete, correct-looking 200 whose images are all dead (MRO-317).
+{
+    clear();
+    let attempts = 0;
+    const OPTS = { ttlMs: 10, maxStaleMs: 40, errorBackoffMs: 5000 };
+    const down = async () => { attempts++; throw new Error('upstream down'); };
+
+    await cached('k3c', async () => ({ v: 'good' }), OPTS);
+    await sleep(20);                     // expired, still inside maxStaleMs
+
+    const served = await cached('k3c', down, OPTS);
+    check('the first failure serves stale and opens a long backoff window',
+        served.source === 'stale' && attempts === 1, `${served.source}, attempts ${attempts}`);
+
+    await sleep(60);                     // now past maxStaleMs, still inside retryAfter
+
+    let threw = false;
+    try { await cached('k3c', down, OPTS); } catch { threw = true; }
+    check('once past maxStaleMs it is NOT served, even mid-backoff',
+        threw, 'an open backoff window must not outrank the staleness ceiling');
+    check('and upstream was retried rather than the dead copy being handed out',
+        attempts === 2, `upstream attempts: ${attempts}`);
+}
+
 // 4. Failure backoff: no cached copy, repeated callers do not each hit upstream
 clear();
 calls = 0;
