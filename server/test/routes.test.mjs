@@ -239,6 +239,68 @@ function stubUpstream(payload, status = 400) {
     await app.close();
 }
 
+// 6. The ordinary success path, which case 5 never reaches (MRO-402).
+//
+//    Case 5 covers the branch that only runs when something is wrong. The path
+//    that runs EVERY time in normal operation had no coverage at all, so the
+//    function read as tested while the production path was not.
+//
+//    Two requests with the cache cleared between them, because three of the four
+//    claims here are about state that persists ACROSS calls: the once-per-process
+//    log, and `tiktokNameAllowed` staying true when nothing was refused. A single
+//    request cannot distinguish "logs once" from "logs every time".
+{
+    const seen = [];
+    const warned = [];
+    const realFetch = globalThis.fetch;
+    console.warn = (msg) => { warned.push(String(msg)); };
+
+    globalThis.fetch = async (url, init) => {
+        const href = String(url);
+        if (href.includes('127.0.0.1')) return realFetch(url, init);
+        seen.push(href);
+        if (href.includes('/oauth/token/')) {
+            return { ok: true, status: 200, json: async () => ({ access_token: 'stub-access', expires_in: 86400 }) };
+        }
+        // Everything succeeds. No refusal anywhere, which is the whole point.
+        return {
+            ok: true, status: 200,
+            json: async () => ({
+                data: { user: { display_name: 'itscherryshin', follower_count: 12, video_count: 3, likes_count: 40 } },
+            }),
+        };
+    };
+
+    const app = await startApp({
+        TIKTOK_CLIENT_KEY: 'ttkey', TIKTOK_CLIENT_SECRET: 'ttsecret', TIKTOK_REFRESH_TOKEN: 'ttrefresh',
+    });
+
+    const first = await (await realFetch(`${app.base}/api/stats`)).json();
+    const afterFirst = seen.filter(u => u.includes('/user/info/'));
+
+    // Cleared so the second request re-runs tiktokStats rather than being served
+    // the memoised answer -- otherwise the cross-call claims below test nothing.
+    clearCache();
+    await realFetch(`${app.base}/api/stats`);
+    const infoCalls = seen.filter(u => u.includes('/user/info/'));
+    const connectedLines = warned.filter(m => m.includes('connected as'));
+
+    check('counts map onto the right fields',
+        first.platforms?.tiktok?.followers === 12 && first.platforms?.tiktok?.posts === 3,
+        JSON.stringify(first.platforms?.tiktok));
+    check('a successful call is not retried — exactly one user/info request',
+        afterFirst.length === 1, `calls: ${JSON.stringify(afterFirst)}`);
+    check('nothing was refused, so the second request still asks for display_name',
+        infoCalls.length === 2 && infoCalls[1].includes('display_name'),
+        JSON.stringify(infoCalls));
+    check('the connected-as line is logged once per process, not per request',
+        connectedLines.length === 1, `${connectedLines.length}: ${JSON.stringify(connectedLines)}`);
+
+    console.warn = () => {};
+    globalThis.fetch = realFetch;
+    await app.close();
+}
+
 loud();
 console.log = realLog;
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');
