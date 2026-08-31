@@ -67,6 +67,28 @@ export function classifyUpstream(error) {
     return { status: 502, kind: 'unreachable' };
 }
 
+// A hint is only as good as the evidence behind it, and that evidence is
+// per-platform. This was one hard-coded string naming Facebook's Graph API
+// Explorer, returned for whichever platform failed - so a YouTube failure sent
+// the reader to rotate a Meta credential (MRO-409). That is this module's own
+// founding defect, MRO-338, surviving inside the fix for it: the hint was scoped
+// to `kind` and never to `platform`.
+//
+// Meta earns a token hint. Its 401/403 and the AUTH_CODES above are token
+// failures and nothing else, measured against the Graph API directly.
+//
+// Google does not. YouTube answers 403 for an exhausted daily quota as well as
+// for a bad key, and quota is by far the commoner of the two - it needs no
+// action at all, because it resets on its own. `ytGet` captures
+// `data.error.code` but not `data.error.errors[0].reason`, which is where
+// `quotaExceeded` actually lives, so the server genuinely cannot tell them apart
+// here. The hint says that rather than picking one.
+const AUTH_HINTS = {
+    Instagram: 'Token may be expired. Visit https://developers.facebook.com/tools/explorer/ to refresh it.',
+    Facebook: 'Token may be expired. Visit https://developers.facebook.com/tools/explorer/ to refresh it.',
+    YouTube: 'YouTube answers 403 for an exhausted daily quota as well as for a bad API key, and quota resets on its own. Check quota in the Google Cloud console before changing the key.',
+};
+
 // The body is built here too, so no route can classify correctly and then
 // attach the wrong hint anyway.
 export function describeUpstreamFailure(platform, kind, message, { sentCursor = false } = {}) {
@@ -87,11 +109,14 @@ export function describeUpstreamFailure(platform, kind, message, { sentCursor = 
         return body;
     }
     if (kind === 'auth') {
-        return {
-            error: `${platform} API error`,
-            message,
-            hint: 'Token may be expired. Visit https://developers.facebook.com/tools/explorer/ to refresh it.',
-        };
+        const body = { error: `${platform} API error`, message };
+        // Absent for a platform we have no justified hint for, which is the same
+        // choice `unreachable` makes below and for the same reason. A missing
+        // hint costs a reader one search; a hint naming the wrong vendor's
+        // console costs them a credential rotation that fixes nothing.
+        const hint = AUTH_HINTS[platform];
+        if (hint) body.hint = hint;
+        return body;
     }
     // Unreachable. Deliberately carries NO hint: the server does not know why,
     // and inventing a cause is the defect this module exists for.

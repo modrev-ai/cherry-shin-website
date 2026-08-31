@@ -170,5 +170,43 @@ check('the auth body still names the token, which is now reachable for Meta',
 check('unreachable still carries no hint at all',
     !('hint' in describeUpstreamFailure('Facebook', 'unreachable', 'x')));
 
+// --- MRO-409: the auth hint is per-platform, and every routed platform is checked
+
+// Every platform index.js passes to describeUpstreamFailure. TikTok is absent on
+// purpose - its posts route is unauthenticated oEmbed and never reaches here.
+const ROUTED = ['Instagram', 'YouTube', 'Facebook'];
+const META = new Set(['Instagram', 'Facebook']);
+
+for (const platform of ROUTED) {
+    const body = describeUpstreamFailure(platform, 'auth', 'x');
+
+    check(`${platform}: an auth failure gets a hint at all`,
+        typeof body.hint === 'string' && body.hint.length > 0,
+        JSON.stringify(body));
+
+    // The assertion that would have caught the original defect, stated as the
+    // general property rather than as three platform-specific strings: a hint
+    // may name Meta's console only for a Meta platform. Before MRO-409 the same
+    // Facebook URL came back for YouTube, and no test looked - because every
+    // auth-hint assertion in this file passed 'Instagram'.
+    check(`${platform}: the hint does not send the reader to another vendor's console`,
+        /facebook[.]com/i.test(body.hint || '') === META.has(platform),
+        `${platform} hint: ${body.hint}`);
+}
+
+check('YouTube names quota, because a 403 there is more often quota than a bad key',
+    /quota/i.test(describeUpstreamFailure('YouTube', 'auth', 'x').hint),
+    describeUpstreamFailure('YouTube', 'auth', 'x').hint);
+
+check('YouTube is NOT told its token expired, which would be a guess and usually wrong',
+    !/token may be expired/i.test(describeUpstreamFailure('YouTube', 'auth', 'x').hint));
+
+// Same principle as the cursor hint's default: silence under-claims, a wrong
+// hint over-claims, and a platform nobody has written a hint for is the case
+// where the server has least business guessing.
+check('a platform with no justified hint gets none, rather than inheriting one',
+    !('hint' in describeUpstreamFailure('TikTok', 'auth', 'x')),
+    JSON.stringify(describeUpstreamFailure('TikTok', 'auth', 'x')));
+
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');
 process.exit(fail.length ? 1 : 0);
