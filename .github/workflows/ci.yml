@@ -20,6 +20,17 @@ jobs:
   check:
     name: Lint and build
     runs-on: ubuntu-latest
+    # A ceiling on a runaway job, NOT an assertion about how fast this should be.
+    # The default when this is unset is 360 minutes, so one hung run burns six
+    # hours of Actions time - and on the free org plan that is 18% of the whole
+    # month's 2,000 minutes, spent silently on a job nobody is watching.
+    #
+    # 10 minutes is 30x the slowest run actually observed here (10 runs, 15-20s,
+    # mean 18s). Deliberately loose: a tight timeout turns a slow-but-healthy run
+    # into a false red, which deletes a verdict rather than protecting one - the
+    # same failure MRO-376 fixed in cancel-in-progress and MRO-358 keeps finding
+    # in load-sensitive tests. This is here to cap the hang, not to police 18s.
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
