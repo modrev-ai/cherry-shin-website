@@ -87,10 +87,79 @@ console.warn = () => {};   // collectStats logs every failure; that is the point
         collectStats('youtube', true, async () => null),
         collectStats('instagram', true, async () => ({ followers: 500 })),
     ]));
-    const { platforms, asked, failed } = summariseStats(collected);
+    const { platforms, silent, asked, failed } = summariseStats(collected);
     check('a platform with nothing to report is not a failure',
         failed === 0 && asked === 2 && Object.keys(platforms).join() === 'instagram',
         `failed ${failed}, kept ${Object.keys(platforms).join()}`);
+    check('but it is named rather than vanishing — MRO-398',
+        silent.join() === 'youtube', `silent ${JSON.stringify(silent)}`);
+    check('one silent platform out of two is not a blackout',
+        isTotalBlackout({ asked, failed, silent }) === false);
+}
+
+// --- MRO-398, asked-and-answered-nothing is its own state --------------------
+//
+// The defect: `asked` incremented, `failed` did not, and no platforms entry was
+// written, so the platform was absent from the response in exactly the way an
+// unconfigured one is. These cases are the distinction, and the blackout case is
+// the one the old code could not reach at all.
+
+{
+    // The discriminating pair: one asked and silent, one never configured. The
+    // old response could not tell these apart — both were simply absent.
+    const collected = await safely(() => Promise.all([
+        collectStats('youtube', true, async () => null),
+        collectStats('facebook', false, async () => ({ followers: 1 })),
+        collectStats('instagram', true, async () => ({ followers: 500 })),
+    ]));
+    const { platforms, silent, asked } = summariseStats(collected);
+
+    check('the silent platform and the unconfigured one are now distinguishable',
+        silent.join() === 'youtube' && asked === 2,
+        `silent ${JSON.stringify(silent)}, asked ${asked}`);
+    check('the unconfigured platform is in neither list, not merely out of one',
+        !silent.includes('facebook') && !Object.keys(platforms).includes('facebook'));
+    check('a platform is in exactly one of connected and silent',
+        Object.keys(platforms).filter(n => silent.includes(n)).length === 0,
+        'overlap would make `connected` a lie rather than a partial truth');
+}
+
+{
+    // The case the old predicate could not reach: nothing threw, so `failed` was
+    // 0, so `failed === asked` was false, and the endpoint answered 200 with no
+    // numbers in it and nothing logged.
+    const collected = await safely(() => Promise.all([
+        collectStats('youtube', true, async () => null),
+        collectStats('instagram', true, async () => null),
+    ]));
+    const summary = summariseStats(collected);
+    check('every configured platform answering with nothing IS a blackout',
+        isTotalBlackout(summary) === true, JSON.stringify(summary));
+    check('and it got there without a single failure recorded',
+        summary.failed === 0 && summary.silent.length === 2,
+        `failed ${summary.failed}, silent ${JSON.stringify(summary.silent)}`);
+}
+
+{
+    // Mixed causes, same consequence. Neither count alone reaches `asked`.
+    const collected = await safely(() => Promise.all([
+        collectStats('youtube', true, async () => { throw new Error('down'); }),
+        collectStats('instagram', true, async () => null),
+    ]));
+    const summary = summariseStats(collected);
+    check('one that threw plus one that went quiet is still a blackout',
+        isTotalBlackout(summary) === true,
+        `failed ${summary.failed}, silent ${JSON.stringify(summary.silent)} — neither alone equals asked`);
+}
+
+{
+    // The widening is strict: where there is no silence, the rule is unchanged.
+    check('the old two-field predicate still answers the same for a real blackout',
+        isTotalBlackout({ asked: 2, failed: 2 }) === true);
+    check('and the same for a partial outage',
+        isTotalBlackout({ asked: 3, failed: 1 }) === false);
+    check('asking nobody is still not a blackout, however it is called',
+        isTotalBlackout({ asked: 0, failed: 0, silent: [] }) === false);
 }
 
 // --- promise two, unconfigured is not zero -----------------------------------

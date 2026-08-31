@@ -301,6 +301,95 @@ function stubUpstream(payload, status = 400) {
     await app.close();
 }
 
+// 7. MRO-398. A platform asked and answered with nothing used to be absent from
+//    the response in exactly the way an unconfigured one is. Driven through the
+//    route rather than the module because the defect this guards is a CALL SITE
+//    one: `isTotalBlackout` defaults `silent` to empty, so index.js passing it
+//    two fields would restore the old behaviour and still read as correct.
+//    stats.test.mjs cannot see that; only a request can.
+{
+    let infoCalls = 0;
+    const realFetch = globalThis.fetch;
+
+    globalThis.fetch = async (url, init) => {
+        const href = String(url);
+        if (href.includes('127.0.0.1')) return realFetch(url, init);
+        if (href.includes('/oauth/token/')) {
+            return { ok: true, status: 200, json: async () => ({ access_token: 'stub-access', expires_in: 86400 }) };
+        }
+        if (href.includes('/user/info/')) {
+            infoCalls += 1;
+            // No data.user and no throw: the exact shape that vanished.
+            return { ok: true, status: 200, json: async () => ({ error: { code: 'scope_not_authorized' } }) };
+        }
+        // YouTube answers properly, so this is a PARTIAL outage rather than a
+        // blackout - which is what keeps the 200 below meaningful.
+        return {
+            ok: true, status: 200,
+            json: async () => ({ items: [{ statistics: { subscriberCount: '90', videoCount: '7', viewCount: '400' } }] }),
+        };
+    };
+
+    const app = await startApp({
+        YOUTUBE_API_KEY: 'ytkey', YOUTUBE_CHANNEL_ID: 'UCstubchannel',
+        TIKTOK_CLIENT_KEY: 'ttkey', TIKTOK_CLIENT_SECRET: 'ttsecret', TIKTOK_REFRESH_TOKEN: 'ttrefresh',
+    });
+
+    const res = await realFetch(`${app.base}/api/stats`);
+    const body = await res.json();
+
+    check('a partial outage with one silent platform is still a 200',
+        res.status === 200, `got ${res.status}`);
+    // Without this the case passes if the stub was never reached and TikTok was
+    // simply unconfigured - the failure mode that made an earlier case here
+    // green against the real Graph API.
+    check('the TikTok stub was actually exercised',
+        infoCalls > 0, `user/info calls: ${infoCalls}`);
+    check('the silent platform is NAMED in the response, not merely absent',
+        Array.isArray(body.silent) && body.silent.join() === 'tiktok',
+        JSON.stringify(body.silent));
+    check('and it is absent from connected, which still holds only what reported',
+        body.connected?.join() === 'youtube', JSON.stringify(body.connected));
+    check('the platform that answered keeps its figures — promise one holds',
+        body.platforms?.youtube?.posts === 7, JSON.stringify(body.platforms));
+
+    globalThis.fetch = realFetch;
+    await app.close();
+}
+
+// 8. The other half: silence ALONE reaching the blackout rule. Nothing throws
+//    here, so the old predicate saw failed 0 of asked 1 and answered 200 with
+//    no numbers in it and nothing logged anywhere.
+{
+    let infoCalls = 0;
+    const realFetch = globalThis.fetch;
+
+    globalThis.fetch = async (url, init) => {
+        const href = String(url);
+        if (href.includes('127.0.0.1')) return realFetch(url, init);
+        if (href.includes('/oauth/token/')) {
+            return { ok: true, status: 200, json: async () => ({ access_token: 'stub-access', expires_in: 86400 }) };
+        }
+        infoCalls += 1;
+        return { ok: true, status: 200, json: async () => ({ error: { code: 'scope_not_authorized' } }) };
+    };
+
+    const app = await startApp({
+        TIKTOK_CLIENT_KEY: 'ttkey', TIKTOK_CLIENT_SECRET: 'ttsecret', TIKTOK_REFRESH_TOKEN: 'ttrefresh',
+    });
+
+    const res = await realFetch(`${app.base}/api/stats`);
+    const body = await res.json().catch(() => ({}));
+
+    check('the only configured platform going quiet IS reported as a blackout',
+        res.status === 502, `got ${res.status}: ${JSON.stringify(body).slice(0, 140)}`);
+    check('and it reached that verdict having exercised the upstream',
+        infoCalls > 0, `user/info calls: ${infoCalls}`);
+
+    globalThis.fetch = realFetch;
+    await app.close();
+}
+
 loud();
 console.log = realLog;
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');

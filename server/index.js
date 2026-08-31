@@ -621,8 +621,11 @@ async function facebookStats() {
 // above: `display_name` needs `user.info.basic`, and a token missing that scope
 // fails the WHOLE request rather than omitting the field. Losing the follower
 // counts to a diagnostic would be worse than not having the diagnostic — and it
-// would fail silently, because tiktokStats returning null is skipped by
-// summariseStats without counting as a failure.
+// would once have failed silently, because tiktokStats returning null was
+// skipped by summariseStats without counting as a failure. MRO-398 gave that
+// its own `silent` state, so the counts are still lost but the loss is now
+// named in the response and reaches the blackout rule. The fallback below is
+// what keeps the counts; `silent` only makes losing them observable.
 const TIKTOK_USER_FIELDS = 'follower_count,video_count,likes_count';
 let tiktokNameAllowed = true;
 let tiktokAccountLogged = false;
@@ -678,8 +681,10 @@ async function tiktokStats() {
 }
 
 // Returns null when the platform is not set up, so it is never counted as an
-// attempt; `failed` marks one that was asked and could not answer, which is
-// what separates a partial outage from a total one.
+// attempt; `failed` marks one that was asked and threw, and `silent` one that
+// was asked and answered with nothing usable. All three are needed to separate
+// a partial outage from a total one - counting only `failed` meant every
+// platform going quiet at once read as a healthy response with no numbers.
 async function fetchAudienceStats() {
     const collected = await Promise.all([
         collectStats(
@@ -692,11 +697,16 @@ async function fetchAudienceStats() {
         collectStats('tiktok', isTikTokApiConfigured(), tiktokStats),
     ]);
 
-    const { platforms, asked, failed } = summariseStats(collected);
+    const summary = summariseStats(collected);
+    const { platforms, silent } = summary;
 
     // The isolation, the blackout rule and the null-not-zero rule all live in
     // stats.js beside the incidents that produced them.
-    if (isTotalBlackout({ asked, failed })) {
+    //
+    // Passed whole rather than destructured into the call. `isTotalBlackout`
+    // defaults `silent` to empty, so handing it two fields would quietly restore
+    // the old behaviour and still look like a call to the new rule.
+    if (isTotalBlackout(summary)) {
         const error = new Error('Every configured platform failed to report stats');
         error.isUpstream = true;
         throw error;
@@ -717,6 +727,11 @@ async function fetchAudienceStats() {
         avatar: platforms.instagram?.avatar || null,
         platforms,
         connected: Object.keys(platforms),
+        // Asked, and answered with nothing usable. Absent from `connected` and
+        // absent from `platforms`, which without this list is indistinguishable
+        // from never having been configured. A platform appears in exactly one
+        // of `connected` and `silent`, or in neither if it was never asked.
+        silent,
     };
 }
 
