@@ -147,10 +147,14 @@ const idsOf = page => page.map(i => i.id);
     const seen = [];
     for (let page = 0; page <= 3; page++) seen.push(...await mod.fetchMixedMedia(page));
 
-    const samples = new Set(seen.filter(i => i.platform === 'instagram').map(i => i.id));
+    // `isSample` rather than an id prefix. The items carry the flag that answers
+    // this exact question, and asserting on a naming convention instead would
+    // accept any live item whose id happened to start with 'ig' - and would
+    // break for a rename that changed nothing real.
+    const igItems = seen.filter(i => i.platform === 'instagram');
     check('an unconfigured platform contributes its samples',
-        samples.size > 0 && [...samples].every(id => id.startsWith('ig')),
-        `saw ${[...samples].join(', ')}`);
+        igItems.length > 0 && igItems.every(i => i.isSample === true),
+        `saw ${igItems.map(i => `${i.id}:${i.isSample}`).join(', ')}`);
     check('an unconfigured platform is asked only once',
         forPath(PATHS.instagram).length === 1,
         `asked ${forPath(PATHS.instagram).length} times`);
@@ -161,12 +165,18 @@ const idsOf = page => page.map(i => i.id);
 //    account during an outage, which is worse than showing fewer posts.
 {
     const routes = allPlatforms(1, { instagram: () => errored('upstream exploded') });
-    const { mod } = await load(routes);
+    const { mod, forPath } = await load(routes);
     const seen = [];
     for (let page = 0; page <= 3; page++) seen.push(...await mod.fetchMixedMedia(page));
     const invented = seen.filter(i => i.platform === 'instagram');
     check('a failing platform never falls back to samples',
         invented.length === 0, `leaked ${invented.map(i => i.id).join(', ')}`);
+    // The positive control. `invented.length === 0` is equally true of "correctly
+    // refused to invent posts" and "was never asked at all", and this is the only
+    // guard on the credibility rule, so on its own it could not fail for the
+    // reason it was written.
+    check('and the platform was actually asked, so the absence means something',
+        forPath(PATHS.instagram).length > 0, `asked ${forPath(PATHS.instagram).length} times`);
 }
 
 // 7. MRO-270, pinned. The timeout can land anywhere in the exchange: aborting
@@ -358,12 +368,14 @@ const unconfigured200 = error =>
     const routes = allPlatforms(1, {
         instagram: () => respond({ status: 200, body: { data: [], paging: {} } }),
     });
-    const { mod } = await load(routes);
+    const { mod, forPath } = await load(routes);
     const seen = [];
     for (let page = 0; page <= 3; page++) seen.push(...await mod.fetchMixedMedia(page));
     const invented = seen.filter(i => i.platform === 'instagram');
     check('an empty 200 from a configured platform gets no samples',
         invented.length === 0, `leaked ${invented.map(i => i.id).join(', ')}`);
+    check('and it was actually asked, so the absence means something',
+        forPath(PATHS.instagram).length > 0, `asked ${forPath(PATHS.instagram).length} times`);
 }
 
 // 17. Backward compatibility, stated as a test rather than as a claim. The
