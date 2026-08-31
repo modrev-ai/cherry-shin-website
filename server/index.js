@@ -647,8 +647,25 @@ async function tiktokStats() {
     //
     // The retry is the discriminator: if dropping the field fixes it, the field
     // was the problem. That is a comparison rather than a guess at an error
-    // string, which matters because TikTok's refusal code for this is not
-    // verified anywhere in this repo.
+    // string, and it is what makes the branch below safe to act on.
+    //
+    // MRO-400. The shape this triggers on is confirmed against TikTok's own
+    // documentation rather than an observed response - we have never seen a
+    // live refusal, and that distinction is the point of saying so here. What
+    // the docs establish is the part the trigger depends on: a field the granted
+    // scopes do not cover fails the WHOLE request with `scope_not_authorized`
+    // and HTTP 401. It does not return a user with the field quietly omitted,
+    // which is the one shape that would leave `!data.user` false and this branch
+    // dead. What the docs do NOT pin down is the error envelope - whether `data`
+    // is absent or present-but-empty - so the condition reaches for `data.user`
+    // rather than `data`, and routes.test.mjs covers both envelopes.
+    //
+    // Worth knowing when reading the warnings below: `display_name` is
+    // user.info.basic, while follower_count, video_count and likes_count are all
+    // user.info.stats - a separate scope since TikTok's 2024 migration. So the
+    // retry can only ever rescue a missing user.info.basic. If user.info.stats
+    // is the one missing, both calls fail and the second warning fires, which is
+    // the correct message for that case.
     if (!body.data?.user && tiktokNameAllowed) {
         const code = body.error?.code;
         const retry = await ask(TIKTOK_USER_FIELDS);

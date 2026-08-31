@@ -390,6 +390,60 @@ function stubUpstream(payload, status = 400) {
     await app.close();
 }
 
+// 9. MRO-400. The same refusal, presented with `data` present but empty.
+//
+//    TikTok's docs confirm the MECHANISM the retry depends on - an unauthorised
+//    field fails the whole request with `scope_not_authorized` and HTTP 401,
+//    rather than returning a user with the field omitted - but they do not pin
+//    the error envelope. The documented SUCCESS envelope always carries `data`,
+//    so an error body of `{ data: {}, error: {...} }` is at least as plausible
+//    as case 5's, which omits `data` entirely.
+//
+//    Both must trigger the retry. Narrowing the condition to `!body.data` would
+//    pass case 5 and fail here, which is exactly why this case exists: it is the
+//    difference between a trigger that works and one that happens to.
+{
+    const seen = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+        const href = String(url);
+        if (href.includes('127.0.0.1')) return realFetch(url, init);
+        seen.push(href);
+        if (href.includes('/oauth/token/')) {
+            return { ok: true, status: 200, json: async () => ({ access_token: 'stub-access', expires_in: 86400 }) };
+        }
+        if (href.includes('display_name')) {
+            return {
+                ok: false, status: 401,
+                json: async () => ({ data: {}, error: { code: 'scope_not_authorized', message: 'stubbed refusal' } }),
+            };
+        }
+        return {
+            ok: true, status: 200,
+            json: async () => ({ data: { user: { follower_count: 12, video_count: 3, likes_count: 40 } }, error: { code: 'ok' } }),
+        };
+    };
+
+    const app = await startApp({
+        TIKTOK_CLIENT_KEY: 'ttkey', TIKTOK_CLIENT_SECRET: 'ttsecret', TIKTOK_REFRESH_TOKEN: 'ttrefresh',
+    });
+    const body = await (await realFetch(`${app.base}/api/stats`)).json();
+    const infoCalls = seen.filter(u => u.includes('/user/info/'));
+
+    check('an empty data object is still a refusal — the retry fires',
+        infoCalls.length === 2, `user/info calls: ${JSON.stringify(infoCalls)}`);
+    check('and the second call dropped display_name',
+        infoCalls[1] && !infoCalls[1].includes('display_name'), JSON.stringify(infoCalls[1]));
+    check('so the counts survive this envelope too',
+        body.platforms?.tiktok?.followers === 12, JSON.stringify(body.platforms?.tiktok));
+    check('and TikTok is reported as connected, not silent',
+        body.connected?.includes('tiktok') && !body.silent?.includes('tiktok'),
+        `connected ${JSON.stringify(body.connected)} silent ${JSON.stringify(body.silent)}`);
+
+    globalThis.fetch = realFetch;
+    await app.close();
+}
+
 loud();
 console.log = realLog;
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');
