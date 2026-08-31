@@ -24,6 +24,26 @@ const DEFAULT_TTL_MS = 10 * 60 * 1000; // 10 minutes
 // Keep this BELOW the shortest upstream signature lifetime. Exceeding it fails
 // silently - a complete, correct-looking 200 whose image URLs are all dead.
 // See docs/feed-and-caching.md, "No media byte is ours" (MRO-317).
+//
+// "Shortest" is a claim across every platform, and the 105h above is one
+// platform's. Measured against production rather than assumed, since a ceiling
+// justified on one upstream and applied to all is how a constant goes quietly
+// wrong when a platform is added:
+//
+//   instagram  scontent-*.cdninstagram.com   Meta-signed, ~105h
+//   facebook   scontent-*.xx.fbcdn.net       Meta-signed, same family
+//   youtube    i.ytimg.com/vi/<id>/*.jpg     NO query string at all - unsigned,
+//                                            so it never expires and is not the
+//                                            binding constraint
+//   tiktok     not configured                contributes no media today
+//
+// So 24h currently clears every configured platform with room to spare, and the
+// binding one is Meta.
+//
+// TikTok is the gap: its CDN thumbnails DO carry expiry parameters and their
+// lifetime has never been measured here, because TIKTOK_POST_URLS has never
+// been set in production. Measure it before enabling TikTok media (MRO-247),
+// rather than after - this ceiling failing is invisible from the response.
 const DEFAULT_MAX_STALE_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_ERROR_BACKOFF_MS = 30 * 1000; // don't retry a failing upstream per-request
 // Ceiling on retained entries. Cursor-keyed pagination makes the key space
