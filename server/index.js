@@ -122,6 +122,7 @@ function mapFacebookPost(post) {
         thumbnail: post.full_picture || null,
         embedUrl,
         date: relativeDate(post.created_time),
+        publishedAt: isoInstant(post.created_time),
         likes: post.likes?.summary?.total_count ?? null,
         views: null,
         comments: post.comments?.summary?.total_count ?? null,
@@ -254,10 +255,11 @@ function mapTikTokVideo(v) {
         embedLink: v.embed_link || null,
         embedUrl: v.embed_link || (v.id ? `https://www.tiktok.com/embed/v2/${v.id}` : null),
         date: relativeDate(v.create_time ? new Date(v.create_time * 1000).toISOString() : null),
-        likes: Number(v.like_count) || 0,
-        views: Number(v.view_count) || 0,
-        comments: Number(v.comment_count) || 0,
-        shares: Number(v.share_count) || 0,
+        publishedAt: v.create_time ? isoInstant(Number(v.create_time) * 1000) : null,
+        likes: countOrNull(v.like_count),
+        views: countOrNull(v.view_count),
+        comments: countOrNull(v.comment_count),
+        shares: countOrNull(v.share_count),
         orientation: width && height && width > height ? 'landscape' : 'portrait',
         url: v.share_url || (v.id ? `https://www.tiktok.com/@/video/${v.id}` : null),
     };
@@ -387,9 +389,10 @@ function mapInstagramItem(item) {
         // Facebook post that refuses to embed.
         embedUrl: null,
         date: relativeDate(item.timestamp),
-        likes: item.like_count || 0,
+        publishedAt: isoInstant(item.timestamp),
+        likes: countOrNull(item.like_count),
         views: null,
-        comments: item.comments_count || 0,
+        comments: countOrNull(item.comments_count),
         url: item.permalink,
     };
 }
@@ -418,6 +421,28 @@ async function fetchInstagramMedia(token, { limit = 12, after = null } = {}) {
         data: (data.data || []).map(mapInstagramItem),
         paging: graphPaging(data.paging),
     };
+}
+
+// The exact instant a post went out, as ISO-8601 UTC, or null. `date` above is
+// for people ("3 days ago") and cannot be turned back into an instant, so a
+// consumer that records posts - the master database's media ingest (MRO-703) -
+// reads this instead. Null when the platform gave nothing parseable, never a
+// guess: a wrong publish date is worse than an absent one.
+function isoInstant(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const then = new Date(value);
+    return Number.isNaN(then.getTime()) ? null : then.toISOString();
+}
+
+// A count the platform reported, or null when it reported none. `|| 0` turned
+// a hidden like count (YouTube lets creators hide them) or a field the API left
+// out into a measured zero, and a post nobody measured is a different fact from
+// a post with no likes (MRO-703). The action rail already renders null as no
+// figure and a real 0 as "0".
+function countOrNull(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
 }
 
 // Feed-style relative date, matching how the rest of the feed reads.
@@ -519,9 +544,10 @@ async function fetchYouTubeVideos({ limit = 12, after = null } = {}) {
             thumbnail: best?.url || null,
             embedUrl: videoId ? `https://www.youtube.com/embed/${videoId}` : null,
             date: relativeDate(snippet.publishedAt),
-            likes: Number(stat.likeCount) || 0,
-            views: Number(stat.viewCount) || 0,
-            comments: Number(stat.commentCount) || 0,
+            publishedAt: isoInstant(snippet.publishedAt),
+            likes: countOrNull(stat.likeCount),
+            views: countOrNull(stat.viewCount),
+            comments: countOrNull(stat.commentCount),
             orientation: shortFlags[videoId] ? 'portrait' : 'landscape',
             url: videoId
                 ? (shortFlags[videoId]

@@ -273,6 +273,23 @@ classifier already handles both.**
 
 ---
 
+## The feed is also a record, so two fields must not guess
+
+Since MRO-703, the master database's media ingest reads this API daily. It stores every post,
+where it went out, and each run's likes, comments and views as a time series.
+
+A consumer that stores what it reads needs two things the cards never did:
+
+| Field | What it holds, and why it exists |
+| --- | --- |
+| `publishedAt` | The exact instant, ISO-8601 UTC, or `null`. `date` ("3 days ago") is for people and cannot be turned back into an instant. `null` means the platform gave nothing parseable, as with TikTok oEmbed. It is never a guess. |
+| `likes`, `comments`, `views`, `shares` | A count the platform reported, or `null` when it reported none. These used to be `\|\| 0`. That turned a like count the creator hid on YouTube, or a field Instagram left out, into a measured zero. A record cannot tell those apart afterwards. The action rail already shows `null` as no figure and a real `0` as "0", so the cards look the same. |
+
+Both are pinned by case 9 in `server/test/routes.test.mjs`, against stubbed Instagram and YouTube
+answers. Reverting either field turns it red.
+
+---
+
 ## Which tests hold which claim
 
 Run everything with `npm test` at the repo root.

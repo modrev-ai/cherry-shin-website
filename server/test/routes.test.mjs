@@ -503,6 +503,60 @@ function stubUpstream(payload, status = 400) {
     await app.close();
 }
 
+// 9. MRO-703: every post carries the exact instant it went out, and a count the
+//    platform did not report is null, not 0. The master database's media ingest
+//    records `publishedAt` as the publish time and each count as a metric capture,
+//    so "3 days ago" would lose the instant and `|| 0` would record a hidden
+//    like count as a measured zero. Stubbed success shapes, no network.
+{
+    const realFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async (url, init) => {
+        const u = String(url);
+        if (u.includes('127.0.0.1')) return realFetch(url, init);
+        calls += 1;
+        const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+        if (u.includes('/media?')) {
+            // Instagram's own timestamp format (+0000), a measured zero for likes,
+            // and no comments_count at all.
+            return ok({ data: [{ id: 'ig1', media_type: 'VIDEO', media_url: 'https://cdn.test/v.mp4',
+                thumbnail_url: 'https://cdn.test/t.jpg', caption: 'hello', timestamp: '2026-09-20T10:00:00+0000',
+                like_count: 0, permalink: 'https://www.instagram.com/reel/abc/' }], paging: {} });
+        }
+        if (u.includes('/playlistItems?')) {
+            return ok({ items: [{ contentDetails: { videoId: 'yt1' }, snippet: { title: 'clip',
+                publishedAt: '2026-09-19T08:30:00Z', thumbnails: { high: { url: 'https://i.ytimg.test/1.jpg' } } } }] });
+        }
+        if (u.includes('/videos?')) {
+            // likeCount hidden by the creator: the API omits the field.
+            return ok({ items: [{ id: 'yt1', statistics: { viewCount: '1249', commentCount: '0' } }] });
+        }
+        if (u.includes('youtube.com/shorts/')) return { ok: false, status: 303 };
+        return { ok: false, status: 404, json: async () => ({ error: { message: 'unexpected ' + u } }) };
+    };
+
+    const app = await startApp({ IG_ACCESS_TOKEN: 'IGtestnotreal', IG_USER_ID: '1789', YOUTUBE_API_KEY: 'AIzatestnotreal', YOUTUBE_CHANNEL_ID: 'UCtest' });
+    const ig = await (await realFetch(`${app.base}/api/instagram/media?limit=1`)).json();
+    const yt = await (await realFetch(`${app.base}/api/youtube/videos?limit=1`)).json();
+    const igPost = ig.data?.[0] || {};
+    const ytPost = yt.data?.[0] || {};
+
+    check('MRO-703: the stubs were used, not the real APIs', calls >= 3, `calls ${calls}`);
+    check('MRO-703: an Instagram post carries its exact publish instant',
+        igPost.publishedAt === '2026-09-20T10:00:00.000Z', `publishedAt ${JSON.stringify(igPost.publishedAt)}`);
+    check('MRO-703: and still its relative date for the card', typeof igPost.date === 'string' && igPost.date.length > 0);
+    check('MRO-703: a measured zero stays 0', igPost.likes === 0, `likes ${JSON.stringify(igPost.likes)}`);
+    check('MRO-703: a count Instagram left out is null, not 0', igPost.comments === null, `comments ${JSON.stringify(igPost.comments)}`);
+    check('MRO-703: a YouTube video carries its exact publish instant',
+        ytPost.publishedAt === '2026-09-19T08:30:00.000Z', `publishedAt ${JSON.stringify(ytPost.publishedAt)}`);
+    check('MRO-703: a hidden YouTube like count is null, not 0', ytPost.likes === null, `likes ${JSON.stringify(ytPost.likes)}`);
+    check('MRO-703: a reported "0" comment count is 0, and views arrive as a number',
+        ytPost.comments === 0 && ytPost.views === 1249, `comments ${ytPost.comments}, views ${ytPost.views}`);
+
+    globalThis.fetch = realFetch;
+    await app.close();
+}
+
 loud();
 console.log = realLog;
 console.log(fail.length ? `\n${fail.length} FAILING: ${fail.join('; ')}` : '\nall passing');
