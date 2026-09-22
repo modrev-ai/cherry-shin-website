@@ -29,6 +29,7 @@ export function itemFromOEmbed(data, postUrl) {
         thumbnail: data.thumbnail_url || null,
         embedUrl: `https://www.tiktok.com/embed/v2/${videoId}`,
         date: '',
+        publishedAt: null,
         likes: null,
         views: null,
         comments: null,
