@@ -27,7 +27,12 @@ export function readLimit(raw) {
 // URL-safe base64 with a little punctuation. Anything outside that was not
 // issued by an upstream we talk to, so passing it on would only mint another
 // key and another fill.
-const CURSOR = /^[A-Za-z0-9_\-=.%|~]{1,512}$/;
+//
+// The length cap is 2048, not 512. Facebook's page cursors are long: the live feed handed out
+// one of 798 characters on 2026-09-22, so a 512 cap refused Facebook's own cursor and the
+// feed could never page Facebook past its first batch (found by the master database's media
+// ingest, MRO-703). 2048 is still a bound; it just is not below a real cursor.
+const CURSOR = /^[A-Za-z0-9_\-=.%|~]{1,2048}$/;
 
 // Returns { ok: false } rather than throwing, so the caller decides the status
 // code. An absent cursor is valid and means the first page.
