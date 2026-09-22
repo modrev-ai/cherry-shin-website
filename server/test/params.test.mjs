@@ -60,8 +60,13 @@ const real = 'QVFIUmxfLXNhbXBsZS1jdXJzb3I9PQ';
 check('a realistic cursor is accepted',
     readAfter(real).ok === true && readAfter(real).value === real);
 
-check('an over-long cursor is rejected',
-    readAfter('a'.repeat(513)).ok === false);
+// Facebook's real cursors run long: 798 characters measured on the live feed, 2026-09-22.
+// The old 512 cap refused them, so Facebook never paged past its first batch (MRO-703).
+const facebookLength = 'QVFIVFBkYnlyWS1jRE9aUDQtV0lUMGNjYms0TDFPU216NXc2SThKLXVmOWxGdWRXSXFlU3FUbkd6dmtpWmtacFJYU2ZA'.repeat(9).slice(0, 798);
+check('a Facebook-length cursor (798 chars, measured) is accepted',
+    readAfter(facebookLength).ok === true && readAfter(facebookLength).value.length === 798);
+check('an over-long cursor is still rejected',
+    readAfter('a'.repeat(2049)).ok === false);
 check('a cursor with a quote is rejected',
     readAfter("abc'def").ok === false);
 check('a cursor with a space is rejected',
