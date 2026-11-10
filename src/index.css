@@ -155,9 +155,11 @@ body {
   margin-top: 10px;
 }
 
+/* A <dl>: the label is the <dt> and comes first in the markup, so the column
+   is reversed to keep the number above it as before. */
 .stat-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   align-items: center;
   gap: 4px;
 }
@@ -168,11 +170,181 @@ body {
   color: #ffffff;
 }
 
+/* No measurement yet: the placeholder dash, dimmed so it does not read as a
+   figure. Never a 0 - see src/services/heroFigures.js. */
+.stat-item.is-unmeasured .stat-number {
+  color: #5c5c6e;
+}
+
 .stat-label {
   font-size: 0.85rem;
   color: #7c7c8e;
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+
+/* SLOT (TH-756): shown only once src/content/profile.js has an `about`. */
+.hero-about {
+  font-size: 0.95rem;
+  color: #c0c0d0;
+  text-align: center;
+  max-width: 440px;
+  line-height: 1.6;
+}
+
+/* ===== Per-platform breakdown under the headline figures ===== */
+.hero-breakdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(360px, 100%);
+}
+
+/* Styled after .filter-btn; 44px tall for a phone tap target (MRO-280). */
+.breakdown-toggle {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid #2a2a3e;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #a0a0b0;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.3s ease, color 0.3s ease;
+}
+
+.breakdown-toggle:hover,
+.breakdown-toggle[aria-expanded='true'] {
+  border-color: #ff6b9d;
+  color: #ff6b9d;
+}
+
+.breakdown-toggle:focus-visible {
+  outline: 2px solid #ff6b9d;
+  outline-offset: 3px;
+}
+
+.breakdown-list {
+  list-style: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border: 1px solid #1f1f30;
+  border-radius: 10px;
+  background: rgba(10, 10, 10, 0.5);
+  font-size: 0.8rem;
+  color: #a0a0b0;
+}
+
+.breakdown-platform {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* TikTok's colour is black, so the dot carries a light ring to stay visible
+   on the dark ground. */
+.breakdown-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot-color);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.breakdown-figures {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 10px;
+}
+
+.breakdown-figures strong {
+  color: #ffffff;
+}
+
+.breakdown-silent {
+  color: #7c7c8e;
+  font-style: italic;
+}
+
+/* ===== Profile reveal (TH-756) =====
+   The profile assembles in order (portrait, name, tagline, figures, breakdown)
+   over about two seconds once the hero is on screen, and falls back when it
+   is scrolled away, so returning plays it again. Only position and opacity
+   move. The easing is ease-out with no overshoot, and no figure's digits ever
+   change while it moves - an animated count would show numbers nobody measured
+   (MRO-241, MKB hero-motion note). */
+.reveal-item {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hero-avatar.reveal-item {
+  transform: scale(0.9);
+}
+
+.is-revealed .reveal-item {
+  opacity: 1;
+  transform: none;
+  transition-delay: calc(var(--reveal-order, 0) * 0.18s);
+}
+
+/* The portrait frame stays hidden until it has something in it - the photo
+   once loaded, or the initials once the photo is known to be unavailable. */
+.is-revealed .hero-avatar.reveal-item:not(.is-ready) {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+/* Measured by HeroSection: when the hero is taller than the screen, it stops
+   being a mandatory stop, and the feed snaps by proximity while it is on the
+   page, so its lower part can still be scrolled to and rested on. */
+.hero-section.hero-section--overflows {
+  scroll-snap-stop: normal;
+}
+
+.app:has(.hero-section--overflows) {
+  scroll-snap-type: y proximity;
+}
+
+/* Short screens (a 375x667 phone among them) get a smaller portrait and
+   tighter spacing, so the hero fits with the breakdown open. */
+@media (max-height: 740px) {
+  .hero-section {
+    padding-top: 32px;
+    padding-bottom: 96px;
+  }
+
+  .hero-content {
+    gap: 12px;
+  }
+
+  .hero-avatar {
+    width: 104px;
+    height: 104px;
+  }
+
+  .hero-stats {
+    margin-top: 0;
+  }
 }
 
 /* ===== Endless Reels Section ===== */
@@ -886,6 +1058,28 @@ body {
     animation: none;
     opacity: 1;
     transform: none;
+  }
+
+  /* The profile reveal shows its finished state at once. The portrait still
+     waits for something to show, which is not motion: it appears, it does not
+     travel. */
+  .hero-section .reveal-item {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .hero-section .hero-avatar.reveal-item:not(.is-ready) {
+    opacity: 0;
+  }
+
+  /* No page snapping: a full-screen snap on every flick is the repeated
+     large-area movement this preference exists to prevent (MRO-574,
+     criterion 6). Each slide is still one screen tall, so the feed reads the
+     same; it just scrolls freely. */
+  .app,
+  .app:has(.hero-section--overflows) {
+    scroll-snap-type: none;
   }
 
   .spinner,

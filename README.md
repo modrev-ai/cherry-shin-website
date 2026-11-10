@@ -12,7 +12,7 @@ A full-screen reel feed that mirrors Cherry Shin's posts from several social pla
 | --- | --- | --- |
 | YouTube | **Live** | already configured |
 | Instagram | **Live** | already configured |
-| Facebook | **Live** | like and comment counts need `pages_read_user_content` (MRO-248) |
+| Facebook | **Live** | already configured; like and comment counts since MRO-248 |
 | TikTok | Built, sample content | `TIKTOK_POST_URLS` for oEmbed, or `TIKTOK_CLIENT_*` for the Display API |
 
 Any platform without credentials falls back to sample content for that platform only, so the feed
@@ -33,6 +33,17 @@ the same way. Sound is available through the player controls, or by opening the 
 Posts are interleaved so consecutive slides come from different platforms. Portrait video fills
 the frame; landscape video gets a wider frame sized to the window, and can be hidden entirely with
 the toggle in the right-hand controls. That preference is remembered per browser.
+
+The first slide is Cherry's profile. It assembles over about two seconds when it is on screen —
+portrait, name, tagline, then the audience figures — and falls back when scrolled away, so
+returning plays it again. The figures follow three states, held in `src/services/heroFigures.js`:
+a measured total shows exactly that number, compacted down rather than rounded up; a total
+nothing has reported shows a dash, never `0`; and a platform that was asked and answered with
+nothing is listed as *not reporting* in the **By platform** breakdown. No figure counts up, because
+the numbers it would pass through were never measured (MRO-241). The portrait frame stays hidden
+until the photo has loaded or the initials stand in for it. Under `prefers-reduced-motion` the
+finished profile shows at once and the feed does not snap. If the profile is ever taller than the
+screen, it stops being a mandatory snap stop, so its lower part stays reachable.
 
 ## Architecture
 
@@ -87,15 +98,17 @@ if traffic grows.
 src/
   App.jsx                     owns the wide-post toggle, persists it to localStorage
   components/
-    HeroSection.jsx           first slide; audience stats and the scroll cue
+    HeroSection.jsx           first slide: the profile reveal, audience figures, per-platform breakdown, scroll cue
     EndlessReels.jsx          feed, infinite scroll, error and retry states
     MediaCard.jsx             one slide: media, inline player, caption, watch button
     MediaActions.jsx          right-hand rail: view/like/comment readouts, and copy-link
     ReelNav.jsx               fixed controls: previous, next, wide-post toggle, home
     PlatformIcon.jsx          per-platform badge
+  content/profile.js          Cherry's name, tagline and about text; null slots render nothing
   constants/platforms.js      platform labels and orientation resolution
   hooks/useInfiniteScroll.js  IntersectionObserver that triggers the next page
   services/mediaApi.js        walks each platform by cursor into one interleaved stream
+  services/heroFigures.js     what the hero may show for a figure: measured, not yet measured, silent
 server/
   index.js                    Express app and all routes; exports the app
   cache.js                    TTL cache with coalescing and stale-on-error
@@ -248,10 +261,10 @@ Notes on what it returns:
   have no direct media URL to embed.
 - Orientation comes from the attachment's image dimensions.
 - The Page's follower count feeds the hero totals alongside YouTube's.
-- **Like and comment counts are missing.** They need `pages_read_user_content`, which the token does
-  not carry, and requesting them without it fails the whole request rather than those fields — so
-  the server asks once, falls back, and remembers. Granting the scope restores them with no code
-  change. Tracked in MRO-248.
+- **Like and comment counts need `pages_read_user_content`.** The scope was granted on 2026-08-31
+  and the counts verified against the live Page (MRO-248, Done), with no code change. The fallback
+  stays: requesting them without the scope fails the whole request rather than those fields, so if
+  the scope is ever lost the server asks once, falls back to posts without counts, and remembers.
 
 ### TikTok — built, needs post URLs
 
@@ -420,8 +433,8 @@ Both are speed bumps rather than gates: bypassable with `--no-verify`, and only 
 `npm install` has been run. CI is the backstop. Branch protection would be the real gate but needs
 a paid GitHub plan.
 
-`npm test` runs thirteen frameworkless suites — three at the root (the commit trailer, the secret
-scanner, the client-side feed walk) and ten under `server/`. Each is plain `node` against a
+`npm test` runs fourteen frameworkless suites — four at the root (the commit trailer, the secret
+scanner, the client-side feed walk, the hero's figure rules) and ten under `server/`. Each is plain `node` against a
 hand-rolled `check(name, ok, detail)`, so there is nothing to install and any one of them runs on
 its own.
 
@@ -442,17 +455,19 @@ and no new convention.
 
 ## Known gaps
 
-- **TikTok shows sample content.** It is built and needs only `TIKTOK_POST_URLS` (MRO-240);
-  its cards are labelled `Sample`. X is no longer listed here at all — it was dropped rather
-  than left permanently sampled (MRO-242).
-- **Facebook shows no like or comment counts.** Those fields need `pages_read_user_content`, which
-  the Page token does not carry; requesting them without it fails the whole request, so the server
-  falls back once and remembers.
+- **TikTok shows sample content.** It is built either way: the Display API route waits on Cherry
+  authorising the app as `itscherryshin` (MRO-247), and the oEmbed route on `TIKTOK_POST_URLS`
+  (MRO-240). Its cards are labelled `Sample`, and it is absent from the hero's figures and
+  breakdown. X is no longer listed here at all — it was dropped rather than left permanently
+  sampled (MRO-242).
 - **Our cache is per-instance** on serverless, so cold starts re-fetch. Vercel's edge cache in
   front of it absorbs most repeat traffic; `X-Cache` on a production response describes the fill it
   came from, not the request being served.
-- **Every card ever scrolled past stays mounted** (MRO-268). Releasing far-offscreen cards needs a
-  browser that composites, to watch scroll position while testing it.
+- **Every card ever scrolled past stays mounted** (MRO-268). Releasing far-offscreen cards was
+  closed as not required (MRO-354) and nothing was built, so the cost stands.
+- **The profile reveal has not been profiled on a real phone**, and it is not one of the ten
+  hero-motion prototypes from 2026-09-07: choosing one of those is Cherry's call (MRO-574). It is
+  the note's middle tier — CSS transitions, no library — built to the note's constraints.
 
 ## Licence
 
