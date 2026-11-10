@@ -31,6 +31,9 @@ dist-ssr
 # One-off Linktree scrape, not app source
 linktree_output.html
 
+# Local design builds (README, Proposing a design): only designs/designs.json is committed
+designs/*/
+
 # Vercel
 .vercel
 

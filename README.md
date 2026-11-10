@@ -298,6 +298,47 @@ Vercel, `modrev` team, project `cherry-shin-website`. Pushes to `main` deploy au
 - Environment variables live in Vercel → Settings → Environment Variables.
 - Stable fallback URL: `cherry-shin-website.vercel.app`. Per-deployment URLs change each time.
 
+### Proposing a design
+
+Proposed designs are compared with the live site in Mastermind's Media cortex, on its **Site** tab
+(TH-752). That tab reads [`designs/designs.json`](designs/designs.json) from the local checkout,
+read-only, and shows each listed design beside the live page, at desktop or phone width, or two
+side by side.
+
+1. Make a branch named `design/<name>`, where `<name>` is lowercase letters, digits and dashes,
+   at most 42 characters.
+2. Push it. Vercel builds a preview for every pushed branch; the branch's preview is
+   `https://cherry-shin-website-git-design-<name>-modrev.vercel.app/`. Pushing a branch does not
+   deploy the live site; only `main` does.
+3. Add an entry to `designs/designs.json` on `main`:
+
+   ```json
+   { "name": "hero-reveal", "status": "proposed", "date": "2026-11-10",
+     "note": "scroll-driven profile reveal",
+     "preview": "https://cherry-shin-website-git-design-hero-reveal-modrev.vercel.app/" }
+   ```
+
+   `status` is `proposed`, `chosen` or `retired`. Instead of `preview` you can give a single
+   deployment's URL (`https://cherry-shin-website-<id>-modrev.vercel.app/`).
+4. Press **Reload** on the Site tab. It re-reads the file and shows the new entry.
+
+**A design that is not pushed** can be shown as a local build. Build it into a folder under
+`designs/` with its base set to that folder:
+
+```bash
+npx vite build --base /<folder>/ --outDir designs/<folder>
+```
+
+Then list it with `"local": "<folder>"` in place of `preview`. Mastermind serves the `designs/`
+folder itself on one fixed origin, `http://127.0.0.1:4752`, so the build shows at
+`http://127.0.0.1:4752/<folder>/`. The built folders are git-ignored; only `designs.json` is
+committed. The local build has no `/api`, so its feed shows no posts.
+
+The Site tab refuses any other address, with its reason, and never loads it: an `http` page, any
+other loopback port or name, a Vercel host outside the modrev team's `cherry-shin-website`
+previews, or a preview that is not the entry's own `design/<name>` branch. A missing or invalid
+`designs.json` shows "No proposed designs yet", and the live page still shows.
+
 ### DNS
 
 Registrar is Namecheap. The apex uses an A record and `www` a CNAME:
