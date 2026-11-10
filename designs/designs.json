@@ -1,0 +1,4 @@
+{
+  "schema": "Proposed designs of cherrystudio.art, shown beside the live site in Mastermind's Media cortex, Site tab (TH-752). Each entry in `designs`: name (lowercase letters, digits and dashes, at most 42; the branch is design/<name>), status (proposed, chosen or retired), date (YYYY-MM-DD), note (optional text, at most 500 characters), and exactly one of preview (the https Vercel preview of design/<name>: https://cherry-shin-website-git-design-<name>-modrev.vercel.app/, or a deployment URL https://cherry-shin-website-<id>-modrev.vercel.app/) or local (a folder under designs/ holding a static build, served by Mastermind at http://127.0.0.1:4752/<folder>/). An entry outside these rules is listed as refused and never loaded. See README, Proposing a design.",
+  "designs": []
+}
