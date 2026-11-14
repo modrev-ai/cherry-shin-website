@@ -49,6 +49,7 @@ const CAUGHT = [
     ['Google API key', 'yt.js', `const k = "AIza${(alnum + alnum).slice(0, 35)}"`],
     ['GitHub token', 'gh.js', `token = "ghp_${(alnum + alnum).slice(0, 36)}"`],
     ['AWS access key id', 'aws.js', `id = "AKIA${caps}"`],
+    ['Vercel Blob token', 'blob.txt', `${'vercel_blob_rw_'}${alnum.slice(0, 16)}_${alnum.slice(0, 30)}`],
     // Split so the header is not a literal here either. The scanner caught
     // this file on its first real commit when it was written out in full -
     // correctly, by its own rules. Assembling it keeps the claim above true

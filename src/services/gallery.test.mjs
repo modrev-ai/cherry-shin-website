@@ -108,6 +108,56 @@ const ids = list => list.map(i => i.id).join(',');
     check('a served library comes back whole', on.configured === true && on.items.length === library.length);
 }
 
+// 6b. Hosted: no library on the server (Vercel), so the gallery reads the
+//     public manifest of web copies on Blob; locally the server's own library
+//     still wins and the public manifest is never asked for.
+{
+    const blobUrl = 'https://store.public.blob.vercel-storage.com/media/web/instagram_7_0-0123456789abcdef.webp';
+    const publicManifest = {
+        schema: 1,
+        generated_at: '2026-11-14T00:00:00.000Z',
+        count: 1,
+        assets: [{
+            id: 'instagram:7:0', platform: 'instagram', kind: 'image', width: 1080, height: 1350,
+            published_at: '2026-11-01T00:00:00.000Z', post_id: '7', index: 0,
+            permalink: 'https://www.instagram.com/p/seven/',
+            web: { url: blobUrl, width: 600, height: 750, role: 'image' },
+        }],
+    };
+    const asked = [];
+    const route = (served, published) => async url => {
+        asked.push(url);
+        if (url === '/api/media/library') return { ok: true, status: 200, json: async () => served };
+        if (url === '/media-library.json') return published;
+        throw new TypeError(`unexpected ${url}`);
+    };
+    const json = body => ({ ok: true, status: 200, json: async () => body });
+
+    globalThis.fetch = route({ configured: false, error: 'not imported' }, json(publicManifest));
+    const hosted = await requestMediaLibrary();
+    check('hosted: the public manifest is used when the server has none',
+        hosted.configured === true && hosted.hosted === true && hosted.items.length === 1, JSON.stringify(hosted));
+    const it = hosted.items[0];
+    check('hosted: tiles and viewer use the Blob web copy', it?.web.url === blobUrl);
+    check('hosted: there is no original file, the post is the original',
+        it?.original.url === null && it?.permalink === 'https://www.instagram.com/p/seven/');
+    check('hosted: it groups like a local item', groupPosts(hosted.items)[0]?.id === 'instagram:7');
+
+    asked.length = 0;
+    globalThis.fetch = route({ configured: true, data: library }, json(publicManifest));
+    const local = await requestMediaLibrary();
+    check('local: the server library wins, originals from the server',
+        local.hosted === false && local.items.length === library.length && local.items[0].original.url.startsWith('/api/media/original/'));
+    check('local: the public manifest is not even fetched', !asked.includes('/media-library.json'), asked.join(','));
+
+    // The host answers a missing static file with the SPA's index.html.
+    globalThis.fetch = route({ configured: false, error: 'not imported' },
+        { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token <'); } });
+    const none = await requestMediaLibrary();
+    check('hosted with no public manifest yet: not configured, the server reason kept',
+        none.configured === false && none.reason === 'not imported', JSON.stringify(none));
+}
+
 // 7. Carousels: children sharing a post id are one gallery item, in index
 //    order, however the library lists them.
 {

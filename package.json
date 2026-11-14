@@ -10,9 +10,10 @@
     "preview": "vite preview",
     "lint:ci": "oxlint --deny-warnings",
     "scan:secrets": "node scripts/scan-secrets.mjs",
-    "test": "node scripts/commit-trailer.test.mjs && node scripts/scan-secrets.test.mjs && node src/services/mediaApi.test.mjs && node src/services/heroFigures.test.mjs && node src/services/gallery.test.mjs && npm test --prefix server",
+    "test": "node scripts/commit-trailer.test.mjs && node scripts/scan-secrets.test.mjs && node src/services/mediaApi.test.mjs && node src/services/heroFigures.test.mjs && node src/services/gallery.test.mjs && node scripts/mediaPublish.test.mjs && npm test --prefix server",
     "prepare": "node scripts/install-hooks.mjs",
-    "media:import": "node scripts/import-media.mjs"
+    "media:import": "node scripts/import-media.mjs",
+    "media:publish": "node scripts/publish-media.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vercel/blob": "^2.9.0",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "vite": "^8.1.1"

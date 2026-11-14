@@ -25,8 +25,10 @@ const KIND_LABELS = { [ALL]: 'All', image: 'Photos', video: 'Videos' }
 // per post: a carousel is one tile with its children, in order, behind it.
 // Tiles show the web copy; opening one shows the original at its uploaded
 // quality, with a link to the file itself and to the post on its platform.
+// On the hosted site (the public manifest, web copies on Vercel Blob) there are
+// no originals: the viewer shows the web copy and links to the post instead.
 function MediaGallery() {
-    const [state, setState] = useState({ status: 'loading', items: [], reason: null })
+    const [state, setState] = useState({ status: 'loading', hosted: false, items: [], reason: null })
     const [platform, setPlatform] = useState(ALL)
     const [kind, setKind] = useState(ALL)
     const [shown, setShown] = useState(PAGE)
@@ -40,6 +42,7 @@ function MediaGallery() {
             if (cancelled) return
             setState({
                 status: result.configured ? 'ready' : 'unconfigured',
+                hosted: Boolean(result.hosted),
                 items: orderNewestFirst(groupPosts(result.items)),
                 reason: result.reason,
             })
@@ -61,7 +64,12 @@ function MediaGallery() {
             <header className="gallery-header">
                 <a className="gallery-back" href="/">&larr; Cherry Shin</a>
                 <h1 id="gallery-title">Gallery</h1>
-                <p>Photos and videos from Cherry&apos;s accounts, newest first. Open one to see it at its original quality.</p>
+                <p>
+                    Photos and videos from Cherry&apos;s accounts, newest first.
+                    {state.hosted
+                        ? ' Open one for a larger view and a link to the original post.'
+                        : ' Open one to see it at its original quality.'}
+                </p>
             </header>
 
             {state.status === 'loading' && (
@@ -183,7 +191,9 @@ function GalleryTile({ item: post, eager, onOpen }) {
 }
 
 // The full-size view. Images load the original file itself, not the web copy;
-// videos play the original with the web poster shown until they start.
+// videos play the original with the web poster shown until they start. With no
+// original here (original.url null: the hosted site), it shows the web copy -
+// a video's poster - and the original is the post on its platform.
 function Lightbox({ item: post, onClose }) {
     const closeRef = useRef(null)
     const [position, setPosition] = useState(0)
@@ -195,6 +205,7 @@ function Lightbox({ item: post, onClose }) {
         ? `${item.original.width}×${item.original.height}`
         : null
     const bytes = formatBytes(item.original.bytes)
+    const hasOriginal = Boolean(item.original.url)
 
     useEffect(() => {
         const previous = document.activeElement
@@ -221,7 +232,9 @@ function Lightbox({ item: post, onClose }) {
                 </button>
 
                 <div className="gallery-lightbox-media">
-                    {item.kind === 'video' ? (
+                    {!hasOriginal ? (
+                        <img key={item.id} src={item.web.url} alt={label} />
+                    ) : item.kind === 'video' ? (
                         <video
                             key={item.id}
                             src={item.original.url}
@@ -248,11 +261,18 @@ function Lightbox({ item: post, onClose }) {
                         <PlatformIcon platform={item.platform} /> {label}
                     </span>
                     <span className="gallery-lightbox-meta">
-                        Original{size ? ` · ${size}` : ''}{bytes ? ` · ${bytes}` : ''}
+                        {hasOriginal
+                            ? `Original${size ? ` · ${size}` : ''}${bytes ? ` · ${bytes}` : ''}`
+                            : `${item.kind === 'video' ? 'Video poster' : 'Web copy'}${size ? ` · original ${size}` : ''}`}
                     </span>
                     <span className="gallery-lightbox-links">
-                        <a href={item.original.url} target="_blank" rel="noopener noreferrer">Open original</a>
-                        {item.permalink && (
+                        {hasOriginal && <a href={item.original.url} target="_blank" rel="noopener noreferrer">Open original</a>}
+                        {!hasOriginal && item.permalink && (
+                            <a href={item.permalink} target="_blank" rel="noopener noreferrer">
+                                {item.kind === 'video' ? 'Watch' : 'Open original'} on {platformLabel(item.platform)}
+                            </a>
+                        )}
+                        {hasOriginal && item.permalink && (
                             <a href={item.permalink} target="_blank" rel="noopener noreferrer">
                                 View on {platformLabel(item.platform)}
                             </a>

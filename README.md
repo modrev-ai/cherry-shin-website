@@ -182,9 +182,30 @@ the server reads the manifest once, so restart it after.
 Settings, both optional: `CHERRY_MEDIA_DIR` (the folder; the import records it and the server
 follows the manifest unless this overrides it) and `MEDIA_LIBRARY_FILE` (the manifest's path).
 
-**On Vercel there is no library** (no folder, no manifest): `/api/media/library` answers
-`configured:false`, `/gallery` says the gallery is not available, and the feed keeps its old
-behaviour. Publishing the files needs a host (Vercel Blob, a CDN bucket) — not decided yet.
+**On the live site: web copies only** (Jong's answer to question 8438, "Web copies online").
+The originals never leave this machine. Only the web copies (webp images and video posters)
+go to Vercel Blob, and a public manifest of them is committed as `public/media-library.json`:
+
+```bash
+npm run media:publish -- --dry-run   # counts and total bytes; no token needed, nothing sent
+vercel env pull .env.local           # operator: puts the project's BLOB_READ_WRITE_TOKEN in .env.local
+node --env-file=.env.local scripts/publish-media.mjs   # upload, then write public/media-library.json
+```
+
+Each blob is named by asset id plus the web copy's sha256 (`media/web/<id>-<hash16>.<ext>`). A
+blob that already exists is skipped, so a re-run after a new pull uploads only what is new or
+changed. The public manifest lists only id, platform, kind, size, date, post id, carousel index,
+permalink and the web copy's URL. It has no local paths, no hashes of the originals, no captions
+and no token: it is built from an allowlist in `scripts/mediaPublish.js`. Without
+`BLOB_READ_WRITE_TOKEN` the script exits 2 and uploads nothing. It never prints the token.
+Commit the manifest and deploy, and the hosted `/gallery` shows the library.
+
+The hosted server still has no library of its own, so `/api/media/library` answers
+`configured:false`. The gallery then reads `/media-library.json`. Tiles and the viewer show the
+Blob web copy, and the viewer's original link is the post on its platform. Locally, after
+`npm run media:import`, nothing changes: the server's own library wins and originals come from
+mkb-data. Until a public manifest is committed, the hosted `/gallery` still says it is not
+available.
 
 No caption or post text is carried: assets are referred to by id, and tiles say only the
 platform, the kind and the date.

@@ -42,6 +42,8 @@ const RULES = [
     { name: 'OpenAI key', rx: /sk-(?:proj-)?[A-Za-z0-9]{32,}/g },
     { name: 'Anthropic key', rx: /sk-ant-[A-Za-z0-9_-]{20,}/g },
     { name: 'AWS access key id', rx: /AKIA[0-9A-Z]{16}/g },
+    // BLOB_READ_WRITE_TOKEN's value (npm run media:publish, TH-756).
+    { name: 'Vercel Blob token', rx: /vercel_blob_rw_[A-Za-z0-9]{8,}_[A-Za-z0-9]{16,}/g },
     { name: 'Private key block', rx: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/g },
 ]
 

@@ -21,8 +21,9 @@
 // import records it in the manifest, and the variable overrides that at serve
 // time), MEDIA_LIBRARY_FILE moves the manifest. On Vercel neither the folder
 // nor the manifest exists, so the library reads as not configured there and
-// the site behaves exactly as it did before - hosting the files publicly is a
-// separate decision.
+// the gallery falls back to the public manifest of web copies on Vercel Blob
+// (npm run media:publish, scripts/mediaPublish.js). The originals are never
+// published.
 //
 // The source folder is read-only to this code: nothing here writes to it.
 //

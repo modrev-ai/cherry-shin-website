@@ -10,22 +10,79 @@ const API = import.meta.env?.VITE_API_BASE || '/api';
 
 export const ALL = 'all';
 
+// The public manifest npm run media:publish writes (scripts/mediaPublish.js):
+// web copies on Vercel Blob, no originals. Served as a static file, so the
+// hosted site needs no server code to read it.
+export const PUBLIC_MANIFEST_URL = '/media-library.json';
+
+// One public manifest asset as a gallery item. There is no original file on
+// the hosted site: original.url is null and the viewer shows the web copy and
+// links to the post (its permalink) instead.
+export function fromPublicAsset(asset) {
+    const width = asset.width || null;
+    const height = asset.height || null;
+    return {
+        id: asset.id,
+        postId: asset.post_id ?? asset.id,
+        index: asset.index ?? 0,
+        platform: asset.platform,
+        kind: asset.kind,
+        publishedAt: asset.published_at,
+        date: '',
+        permalink: asset.permalink || null,
+        duration: null,
+        orientation: width && height && width > height ? 'landscape' : 'portrait',
+        web: {
+            url: asset.web?.url || null,
+            width: asset.web?.width ?? null,
+            height: asset.web?.height ?? null,
+            role: asset.web?.role === 'poster' ? 'poster' : 'image',
+        },
+        original: { url: null, hosted: false, width, height, mime: null, bytes: null, quality: null },
+    };
+}
+
+async function requestPublicManifest(url, timeoutMs) {
+    const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!response.ok) return null;
+    // A missing file on the host answers with the SPA's index.html, not a 404.
+    const body = await response.json().catch(() => null);
+    if (body?.schema !== 1 || !Array.isArray(body.assets)) return null;
+    const items = body.assets.filter(asset => asset?.id && asset.web?.url).map(fromPublicAsset);
+    return items.length ? items : null;
+}
+
 // One request, no caching: callers that want to reuse the answer keep it.
-// Resolves to { configured, items, reason }; never rejects, because a missing
-// library is a normal state (Vercel has none) rather than a fault.
-export async function requestMediaLibrary({ apiBase = API, timeoutMs = 8000 } = {}) {
+// Resolves to { configured, hosted, items, reason }; never rejects, because a
+// missing library is a normal state rather than a fault.
+//
+// Which library: this server's own first (locally, after npm run media:import,
+// with the originals from mkb-data). Where the server has none - the hosted
+// site, which never has the originals - the public manifest of web copies on
+// Vercel Blob, with hosted: true.
+export async function requestMediaLibrary({ apiBase = API, publicManifestUrl = PUBLIC_MANIFEST_URL, timeoutMs = 8000 } = {}) {
+    let reason;
     try {
         const response = await fetch(`${apiBase}/media/library`, {
             signal: AbortSignal.timeout(timeoutMs),
         });
         const body = await response.json();
-        if (!response.ok || body?.configured === false || !Array.isArray(body?.data)) {
-            return { configured: false, items: [], reason: body?.error || `status ${response.status}` };
+        if (response.ok && body?.configured !== false && Array.isArray(body?.data)) {
+            return { configured: true, hosted: false, items: body.data, reason: null };
         }
-        return { configured: true, items: body.data, reason: null };
+        reason = body?.error || `status ${response.status}`;
     } catch (err) {
-        return { configured: false, items: [], reason: err?.message || 'unreachable' };
+        reason = err?.message || 'unreachable';
     }
+    if (publicManifestUrl) {
+        try {
+            const items = await requestPublicManifest(publicManifestUrl, timeoutMs);
+            if (items) return { configured: true, hosted: true, items, reason: null };
+        } catch {
+            // Fall through to the server's own reason, the more useful one.
+        }
+    }
+    return { configured: false, hosted: false, items: [], reason };
 }
 
 const time = item => {
