@@ -10,8 +10,9 @@
     "preview": "vite preview",
     "lint:ci": "oxlint --deny-warnings",
     "scan:secrets": "node scripts/scan-secrets.mjs",
-    "test": "node scripts/commit-trailer.test.mjs && node scripts/scan-secrets.test.mjs && node src/services/mediaApi.test.mjs && node src/services/heroFigures.test.mjs && npm test --prefix server",
-    "prepare": "node scripts/install-hooks.mjs"
+    "test": "node scripts/commit-trailer.test.mjs && node scripts/scan-secrets.test.mjs && node src/services/mediaApi.test.mjs && node src/services/heroFigures.test.mjs && node src/services/gallery.test.mjs && npm test --prefix server",
+    "prepare": "node scripts/install-hooks.mjs",
+    "media:import": "node scripts/import-media.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

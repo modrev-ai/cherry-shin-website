@@ -5,6 +5,11 @@
 // invented figures in the tens of thousands, published on a branded site beside
 // real ones, which overstated the account's reach. A sample says only what it
 // honestly can - a platform, a title, a picture - and the card labels it.
+//
+// Where the media library has Cherry's real posts for a platform, those stand
+// in instead of the samples (TH-756, standInsFor below).
+
+import { groupPosts, orderNewestFirst, requestMediaLibrary, toFeedItem } from './gallery.js';
 
 // Relative by default so the deployed site talks to its own origin. Set
 // VITE_API_BASE at build time when the backend lives elsewhere. In dev, Vite
@@ -433,6 +438,22 @@ const feed = {
     cycles: 0,
 };
 
+// Her real posts from the media library (TH-756), asked for at most once and
+// only when some platform needs a stand-in. Where the library has posts for a
+// platform they replace that platform's invented samples; where it has none
+// (TikTok, YouTube today) or is not served at all (Vercel), the samples stay.
+let library = null;
+
+async function standInsFor(platform) {
+    if (!library) library = requestMediaLibrary({ apiBase: API_BASE });
+    const { items } = await library;
+    const own = items.filter(item => item.platform === platform.key);
+    if (!own.length) return platform.samples;
+    // One card per post: a carousel stands in as its cover, not as n cards.
+    return orderNewestFirst(groupPosts(own))
+        .map(post => toFeedItem({ ...post.cover, id: post.id, publishedAt: post.publishedAt, permalink: post.permalink }));
+}
+
 // Extensions are serialised. StrictMode double-invokes effects and a retry can
 // land while a fetch is in flight; without this two callers could both extend
 // and append the same batch twice.
@@ -490,7 +511,7 @@ async function extendStream() {
                 // reverting to invented posts under its own name.
                 if (!feed.sampled.has(platform.key)) {
                     feed.sampled.add(platform.key);
-                    batch.push(...platform.samples);
+                    batch.push(...await standInsFor(platform));
                 }
                 feed.cursors[platform.key] = null;
                 continue;

@@ -1468,3 +1468,268 @@ body {
   border-color: rgba(255, 107, 157, 0.4);
   color: #fff;
 }
+
+/* ===== Gallery (TH-756) ===== */
+/* The hero's link to it, in the breakdown toggle's style. */
+.hero-gallery-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+/* Its own scroller: the home page's .app snaps one slide at a time, which a
+   grid must not do. */
+.gallery-page {
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #1a1a2e 0%, #0a0a0a 420px);
+}
+
+.gallery {
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  padding: 40px 16px 64px;
+}
+
+.gallery-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.gallery-header h1 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ff6b9d, #c44dff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gallery-header p {
+  color: #a0a0b0;
+  margin-top: 8px;
+}
+
+.gallery-back {
+  display: inline-block;
+  margin-bottom: 16px;
+  color: #a0a0b0;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.gallery-back:hover,
+.gallery-back:focus-visible {
+  color: #ff6b9d;
+}
+
+.gallery-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 24px;
+  margin-bottom: 24px;
+}
+
+.gallery-filter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.gallery-filter-btn[aria-pressed='true'] {
+  border-color: #ff6b9d;
+  color: #ff6b9d;
+}
+
+.gallery-count {
+  margin-left: 4px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.gallery-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.gallery-tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #16161f;
+  cursor: pointer;
+}
+
+.gallery-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.gallery-tile:hover img {
+  transform: scale(1.04);
+}
+
+.gallery-tile:focus-visible {
+  outline: 2px solid #ff6b9d;
+  outline-offset: 2px;
+}
+
+.gallery-tile-badges {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.gallery-video-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.gallery-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.gallery-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(5, 5, 10, 0.92);
+}
+
+.gallery-lightbox-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: min(1100px, 100%);
+  max-height: 100%;
+}
+
+.gallery-lightbox-media {
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+}
+
+.gallery-lightbox-media img,
+.gallery-lightbox-media video {
+  max-width: 100%;
+  max-height: calc(100dvh - 190px);
+  object-fit: contain;
+  border-radius: 8px;
+  background: #000;
+}
+
+.gallery-lightbox-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+}
+
+.gallery-lightbox-close:focus-visible {
+  outline: 2px solid #ff6b9d;
+  outline-offset: 2px;
+}
+
+.gallery-lightbox-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  color: #a0a0b0;
+  font-size: 0.9rem;
+}
+
+.gallery-lightbox-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+}
+
+.gallery-lightbox-links {
+  display: inline-flex;
+  gap: 16px;
+}
+
+.gallery-lightbox-links a {
+  color: #ff6b9d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-tile img {
+    transition: none;
+  }
+
+  .gallery-tile:hover img {
+    transform: none;
+  }
+}
+
+.gallery-lightbox-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #a0a0b0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The platform chip on a tile and in the viewer: icon only, since the viewer's
+   title and the tile's label already name the platform. */
+.gallery-tile-badges .platform-icon,
+.gallery-lightbox-title .platform-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+
+.gallery-tile-badges .platform-name,
+.gallery-lightbox-title .platform-name {
+  display: none;
+}

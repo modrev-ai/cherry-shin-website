@@ -114,7 +114,12 @@ function HeroSection() {
         }
     }
 
-    const avatar = stats?.avatar || null
+    // The platforms' own picture first; then the library photo named in
+    // profile.js, if one has been chosen; then the initials.
+    const libraryPortrait = profile.portraitAssetId
+        ? `${API_BASE}/media/web/${encodeURIComponent(profile.portraitAssetId)}`
+        : null
+    const avatar = stats?.avatar || libraryPortrait
     const showPhoto = Boolean(avatar) && !avatarFailed
     // Initials are the fallback, not the default: they stand in when the
     // platform is not connected, does not return a picture, the short-lived
@@ -190,8 +195,12 @@ function HeroSection() {
                     ))}
                 </dl>
 
+                <a className="breakdown-toggle hero-gallery-link reveal-item" href="/gallery" style={{ '--reveal-order': 7 }}>
+                    Gallery
+                </a>
+
                 {rows.length > 0 && (
-                    <div className="hero-breakdown reveal-item" style={{ '--reveal-order': 7 }}>
+                    <div className="hero-breakdown reveal-item" style={{ '--reveal-order': 8 }}>
                         <button
                             type="button"
                             className="breakdown-toggle"

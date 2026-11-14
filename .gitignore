@@ -39,3 +39,7 @@ designs/*/
 
 .vercel
 .env*
+
+# Media library manifest written by npm run media:import (TH-756); the files
+# themselves stay in the mkb-data folder and are never committed.
+server/generated/

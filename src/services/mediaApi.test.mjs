@@ -394,6 +394,49 @@ const unconfigured200 = error =>
         samples.length > 0, 'no samples from the legacy shape');
 }
 
+// 18. TH-756. With the media library served, an unconfigured platform stands in
+//     with Cherry's real posts from it rather than the invented samples; a
+//     platform the library has nothing for keeps its samples.
+{
+    const libraryItem = (id, platform, publishedAt, postId = id, index = 0) => ({
+        id, platform, kind: 'image', publishedAt, postId, index, date: '', orientation: 'portrait',
+        permalink: `https://example.test/${id}`,
+        web: { url: `/api/media/web/${id}` }, original: { url: `/api/media/original/${id}` },
+    });
+    const routes = allPlatforms(1, {
+        instagram: () => unconfigured200('Instagram not configured'),
+        tiktok: () => unconfigured200('TikTok not configured'),
+    });
+    routes['/media/library'] = () => respond({ body: { configured: true, data: [
+        libraryItem('instagram:1:0', 'instagram', '2026-01-01T00:00:00.000Z'),
+        libraryItem('instagram:2:0', 'instagram', '2026-02-01T00:00:00.000Z'),
+        // A carousel: three files, one post, listed out of order.
+        libraryItem('instagram:3:2', 'instagram', '2026-03-01T00:00:00.000Z', '3', 2),
+        libraryItem('instagram:3:0', 'instagram', '2026-03-01T00:00:00.000Z', '3', 0),
+        libraryItem('instagram:3:1', 'instagram', '2026-03-01T00:00:00.000Z', '3', 1),
+    ] } });
+    const { mod, calls } = await load(routes);
+    const seen = [];
+    for (let page = 0; page <= 3; page++) seen.push(...await mod.fetchMixedMedia(page));
+
+    const instagram = new Set(seen.filter(i => i.platform === 'instagram').map(i => i.id));
+    check('an unconfigured platform stands in with its library posts',
+        instagram.size === 3 && instagram.has('instagram:instagram:1:0') && instagram.has('instagram:instagram:2:0'),
+        `saw ${[...instagram].join(', ')}`);
+    const carouselCard = seen.find(i => i.id === 'instagram:3');
+    check('a carousel stands in as one card, its cover (child 0)',
+        carouselCard?.thumbnail === '/api/media/web/instagram:3:0' && !seen.some(i => i.id === 'instagram:3:1'),
+        JSON.stringify(carouselCard));
+    check('and those stand-ins are not labelled samples',
+        seen.filter(i => i.platform === 'instagram').every(i => !i.isSample));
+    const tiktok = seen.filter(i => i.platform === 'tiktok');
+    check('a platform the library has nothing for keeps its samples',
+        tiktok.length > 0 && tiktok.every(i => i.isSample), `tiktok ${tiktok.map(i => i.id).join(', ')}`);
+    check('the library is asked for once, not per platform',
+        calls.filter(c => c.startsWith('/api/media/library')).length === 1,
+        `asked ${calls.filter(c => c.startsWith('/api/media/library')).length} times`);
+}
+
 console.warn = realWarn;
 console.log(fail.length ? `\n${fail.length} failed:\n  ${fail.join('\n  ')}` : '\nAll passed.');
 process.exit(fail.length ? 1 : 0);

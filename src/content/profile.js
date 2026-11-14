@@ -18,4 +18,11 @@ export const profile = {
     // SLOT (TH-756): a short "about" paragraph shown under the tagline. Plain
     // text, roughly two sentences, so the hero still fits a 375x667 phone.
     about: null,
+
+    // SLOT (TH-756): the media-library id of the photo to use as her portrait
+    // when the platforms send none, e.g. 'instagram:17888087073689927:0' (ids
+    // are on the /gallery page's "Open original" links and in
+    // server/generated/media-library.json). Null keeps the initials. Which
+    // photo is her portrait is Cherry's or Jong's call, not a guess.
+    portraitAssetId: null,
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import EndlessReels from './components/EndlessReels'
 import HeroSection from './components/HeroSection'
+import MediaGallery from './components/MediaGallery'
 import ReelNav from './components/ReelNav'
 
 const SHOW_WIDE_KEY = 'cherrystudio:showWide'
@@ -18,7 +19,26 @@ function readShowWide() {
   }
 }
 
+// The gallery is its own address rather than a section of the home page: the
+// home page ends in an endless feed, so anything placed after it could never be
+// scrolled to. vercel.json and Vite's dev server already send every path to
+// index.html, so no router is needed for one extra page.
+function isGalleryPath(pathname) {
+  return pathname.replace(/\/+$/, '') === '/gallery'
+}
+
 function App() {
+  if (isGalleryPath(window.location.pathname)) {
+    return (
+      <div className="gallery-page">
+        <MediaGallery />
+      </div>
+    )
+  }
+  return <Home />
+}
+
+function Home() {
   // Wide posts sit awkwardly in a feed built around vertical video, so they can
   // be switched off. State lives here because the control and the feed it
   // filters are siblings.

@@ -12,6 +12,7 @@ import { diagnosticsEnabled, diagnosticsGuard } from './diagnostics.js';
 import { itemFromOEmbed, collectPosts } from './tiktok.js';
 import { isPlaceholderToken, instagramConfigured } from './credentials.js';
 import { collectStats, summariseStats, isTotalBlackout, sumField } from './stats.js';
+import { createMediaLibrary, toClientItem } from './mediaLibrary.js';
 
 dotenv.config();
 
@@ -971,6 +972,41 @@ app.get('/api/stats', async (req, res) => {
         console.error('Error fetching audience stats:', error.message);
         return res.status(502).json({ error: 'Failed to fetch stats', message: error.message });
     }
+});
+
+// Cherry's media library (TH-756): the photos and videos pulled at original
+// quality (TH-909), served from the folder the pull wrote. How it is stored and
+// why it is not in git is in mediaLibrary.js. Unconfigured - no manifest, as on
+// Vercel - answers like any unconfigured platform.
+const mediaLibrary = createMediaLibrary({
+    manifestFile: process.env.MEDIA_LIBRARY_FILE || join(__dirname, 'generated', 'media-library.json'),
+    mediaDir: process.env.CHERRY_MEDIA_DIR || null,
+});
+
+app.get('/api/media/library', async (req, res) => {
+    const library = await mediaLibrary.load();
+    if (!library.configured) return sendUnconfigured(res, library.reason);
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.json({
+        configured: true,
+        count: library.manifest.assets.length,
+        data: library.manifest.assets.map(asset => toClientItem(asset, { relativeDate })),
+    });
+});
+
+app.get('/api/media/:variant(web|original)/:id', async (req, res) => {
+    const found = await mediaLibrary.resolveFile(req.params.id, req.params.variant);
+    if (!found) return res.status(404).json({ error: 'Unknown media asset' });
+    // Files never change under an id - a changed upload gets a new sha and the
+    // pull rewrites the entry - so they can be cached hard. sendFile answers
+    // Range requests, which is what lets a long original video seek.
+    const options = { maxAge: '7d' };
+    if (req.params.variant === 'original' && found.asset.mime) {
+        options.headers = { 'Content-Type': found.asset.mime };
+    }
+    return res.sendFile(found.path, options, err => {
+        if (err && !res.headersSent) res.status(err.status || 404).json({ error: 'Media file unavailable' });
+    });
 });
 
 // Endpoint: cache visibility, for checking that upstream calls stay flat

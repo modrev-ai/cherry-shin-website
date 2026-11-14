@@ -126,6 +126,9 @@ api/index.js                  Vercel entry point; delegates to the Express app
 | `GET /api/instagram/status` | token validity — **local only**, 404 in production |
 | `GET /api/stats` | audience totals aggregated across configured platforms |
 | `GET /api/cache/stats` | hit rate and upstream call counts — **local only**, 404 in production |
+| `GET /api/media/library` | Cherry's media library (below): one item per photo or video, or `configured:false` |
+| `GET /api/media/web/:id` | an asset's web copy (webp, or a video's poster) |
+| `GET /api/media/original/:id` | the asset's original file at uploaded quality, with `Range` support |
 
 `after` is the cursor from the previous response's `paging.next`; its absence means the platform
 has nothing more. Every platform is normalised to that one shape.
@@ -152,6 +155,39 @@ loop over `?limit=` could exhaust the YouTube daily quota. See
 
 Responses carry `X-Cache: HIT | MISS | STALE` and an `Age` header — but read the caching section
 above before trusting `X-Cache` on production.
+
+### Media library and the gallery (TH-756)
+
+Every photo and video pulled from Cherry's accounts at original upload quality (TH-909) is shown
+at **`/gallery`**: one tile per post (a carousel is one tile, its children in order behind it),
+newest first, filterable by platform and by photos/videos. Opening a tile shows the **original
+file** — full-resolution image, or the original video with its poster — plus links to the file
+and to the post. The hero links to it. The feed also uses the library: a platform with no
+credentials stands in with her real posts from it instead of invented samples (TikTok and
+YouTube have no library assets, so they keep their samples).
+
+**Storage.** The files are not in git (≈1.9 GB, and growing). They stay in the folder the pull
+writes, `C:/Workstation/mkb-data/sources/media/cherry` (read-only to this repo), and this
+site's own Express server serves them:
+
+```bash
+npm run media:import    # read index.json, check every entry and file (sha256), write the manifest
+```
+
+The import writes `server/generated/media-library.json` (ignored by git) and exits 1, naming
+each one, if any entry is malformed or a file is missing or does not match its sha256 (those
+entries are left out). `--no-hash` skips the hashing for a quick run. Rerun it after each pull;
+the server reads the manifest once, so restart it after.
+
+Settings, both optional: `CHERRY_MEDIA_DIR` (the folder; the import records it and the server
+follows the manifest unless this overrides it) and `MEDIA_LIBRARY_FILE` (the manifest's path).
+
+**On Vercel there is no library** (no folder, no manifest): `/api/media/library` answers
+`configured:false`, `/gallery` says the gallery is not available, and the feed keeps its old
+behaviour. Publishing the files needs a host (Vercel Blob, a CDN bucket) — not decided yet.
+
+No caption or post text is carried: assets are referred to by id, and tiles say only the
+platform, the kind and the date.
 
 ---
 
@@ -468,6 +504,11 @@ and no new convention.
 - **The profile reveal has not been profiled on a real phone**, and it is not one of the ten
   hero-motion prototypes from 2026-09-07: choosing one of those is Cherry's call (MRO-574). It is
   the note's middle tier — CSS transitions, no library — built to the note's constraints.
+
+- **The gallery works locally only** until the media library has a public host (see Media
+  library above).
+- **Her portrait is still the initials when no platform sends one.** `portraitAssetId` in
+  `src/content/profile.js` takes a library id; which photo is hers to choose.
 
 ## Licence
 
